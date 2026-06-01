@@ -1074,15 +1074,68 @@ async function delDoc(id){ showLoading('Excluindo...'); await sb.from('documento
 // SEARCH
 async function doSearch(val){
   if(!val){ render(); return; }
-  const { data:res }=await sb.from('documentos').select('*').ilike('nome','%'+val+'%');
-  const c=document.getElementById('cnt'); c.className='cnt fade-in';
-  let rows=''; (res||[]).forEach(d=>{ rows+=`<tr><td style="font-weight:600">${esc(d.nome)}</td><td style="color:var(--t2)">${esc(d.modulo)}</td><td>${esc(d.responsavel)}</td><td>${fd(d.data_validade)}</td><td>${stB(d.status)}</td><td><div class="bic edt" data-edit="${d.id}"><i class="ti ti-edit"></i></div></td></tr>`; });
-  c.innerHTML=`<div class="ph"><div class="ph-l"><div class="ph-bar"></div><div><div class="pt">Busca: "${esc(val)}"</div><div class="ps">${(res||[]).length} resultado(s)</div></div></div></div><div class="card">${!rows?'<div class="empty"><i class="ti ti-search-off"></i><div class="empty-t">Nenhum resultado</div></div>':`<div class="tw"><table><thead><tr><th>Documento</th><th>Módulo</th><th>Responsável</th><th>Validade</th><th>Status</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`}</div>`;
-}
+  let searchQ = sb.from('documentos').select('*').ilike('nome','%'+val+'%');
+  if(filialAtiva !== 'todas'){
+    if(filialAtiva === 'Matriz') searchQ = searchQ.eq('filial','Matriz');
+    else searchQ = searchQ.in('filial',[filialAtiva,'Matriz']);
+  }
+  const { data:res } = await searchQ;
+  const c = document.getElementById('cnt'); c.className='cnt fade-in';
 
-// ============================================================
-// TREINAMENTOS
-// ============================================================
+  const modToNav={
+    'Documentação Regulatória':'reg','POPs':'pops','PGRSS':'pgrss',
+    'Organograma e MBP':'organo','Serviços':'servicos','Qualificações':'qualif',
+    'Treinamentos':'trein','Auditorias':'audit'
+  };
+  const subToNav={
+    'Alvarás':'alvaras','CRT':'crt','Cercon':'cercon','Licença Ambiental':'licamb',
+    'Projeto Arquitetônico':'projeto','AFE e AE':'afe','CNPJ':'cnpj',
+    'Dedetização':'dedet',"Limpeza de Caixa d'Água":'agua','Calibração':'calib',
+    'Qualificação Térmica':'qterm','Bebedouros':'bebed',
+    'Climatizador e Ar Condicionado':'clim','Incineração':'incin','Extintores':'extin',
+    'Fornecedores':'qforn','Clientes':'qcli','Qualif. Serviços':'qserv','Sistemas':'qsist'
+  };
+
+  let rows='';
+  (res||[]).forEach(d=>{
+    const navId = (d.submodulo && subToNav[d.submodulo]) ? subToNav[d.submodulo] : (modToNav[d.modulo]||'reg');
+    const liveStatus = d.data_validade&&!d.val_indeterminada ? calcStat(d.data_validade) : d.status;
+    const destLabel = d.submodulo || d.modulo;
+    rows +=
+      '<tr style="cursor:pointer" '+
+        'onclick="goToDoc(\''+d.id+'\',\''+navId+'\')" '+
+        'onmouseover="this.style.background=\'var(--pxl)\'" '+
+        'onmouseout="this.style.background=\'\'">'+
+        '<td>'+
+          '<div style="font-weight:600;color:var(--p)">'+esc(d.nome)+'</div>'+
+          '<div style="font-size:11px;color:var(--t3);margin-top:2px">'+
+            '<i class="ti ti-arrow-right" style="font-size:10px;margin-right:3px"></i>'+
+            'Ir para: '+esc(destLabel)+
+            (filialAtiva==='todas'&&d.filial?'<span style="margin-left:6px;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);font-size:9px;font-weight:700;padding:1px 6px;border-radius:20px">'+esc(d.filial)+'</span>':'')+
+          '</div>'+
+        '</td>'+
+        '<td style="color:var(--t2);font-size:12.5px">'+esc(d.modulo)+(d.submodulo&&d.submodulo!==d.modulo?'<br><span style="font-size:10.5px;color:var(--t3)">'+esc(d.submodulo)+'</span>':'')+'</td>'+
+        '<td>'+esc(d.responsavel)+'</td>'+
+        '<td>'+fd(d.data_validade)+'</td>'+
+        '<td>'+stB(liveStatus)+'</td>'+
+        '<td onclick="event.stopPropagation()"><div class="bic edt" data-edit="'+d.id+'" title="Editar"><i class="ti ti-edit"></i></div></td>'+
+      '</tr>';
+  });
+
+  c.innerHTML =
+    '<div class="ph"><div class="ph-l"><div class="ph-bar"></div><div>'+
+      '<div class="pt">Busca: "'+esc(val)+'"</div>'+
+      '<div class="ps">'+(res||[]).length+' resultado(s) · Clique para ir até o documento</div>'+
+    '</div></div></div>'+
+    '<div class="card">'+
+      (!rows
+        ? '<div class="empty"><i class="ti ti-search-off"></i><div class="empty-t">Nenhum resultado para "'+esc(val)+'"</div></div>'
+        : '<div class="tw"><table>'+
+            '<thead><tr><th>Documento</th><th>Módulo</th><th>Responsável</th><th>Validade</th><th>Status</th><th></th></tr></thead>'+
+            '<tbody>'+rows+'</tbody>'+
+          '</table></div>')+
+    '</div>';
+}
 async function renderTrein(tabObs){
   if(tabObs===undefined) tabObs = window._treinObsTab||false;
   window._treinObsTab = tabObs;
@@ -2329,6 +2382,41 @@ function handleQuickReg(e){
     newReg();
   };
   reader.readAsDataURL(f);
+}
+
+
+// Navigate to the module containing the document and highlight it
+async function goToDoc(docId, navId, parentLabel, subLabel){
+  // Clear search
+  const gSrc = document.getElementById('gSrc');
+  if(gSrc) gSrc.value = '';
+
+  // Navigate to correct module
+  curPastaId = null; curPastaNome = '';
+  window._docsObsTab = false;
+
+  if(subLabel && subLabel !== parentLabel){
+    navigate(navId, parentLabel, subLabel);
+  } else {
+    navigate(navId);
+  }
+
+  // After render, highlight the specific row
+  setTimeout(()=>{
+    const row = document.querySelector('[data-nome]');
+    // Find and scroll to the doc row
+    const allRows = document.querySelectorAll('#docTB tr');
+    allRows.forEach(r=>{
+      if(r.querySelector('[data-edit="'+docId+'"]')||r.querySelector('[data-obsdoc="'+docId+'"]')){
+        r.scrollIntoView({behavior:'smooth', block:'center'});
+        r.style.transition='background .3s';
+        r.style.background='var(--lxl)';
+        r.style.outline='2px solid var(--l)';
+        r.style.borderRadius='4px';
+        setTimeout(()=>{ r.style.background=''; r.style.outline=''; }, 2500);
+      }
+    });
+  }, 800);
 }
 
 // ============================================================
