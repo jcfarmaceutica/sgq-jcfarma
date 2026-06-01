@@ -370,7 +370,7 @@ tr.selected td{background:#EBF4F7 !important}
     <div class="sbox"><i class="ti ti-search" style="color:var(--t3);font-size:15px"></i><input type="text" id="gSrc" placeholder="Buscar documentos..." oninput="doSearch(this.value)"/></div>
     <div class="filial-badge" id="filialBadge" onclick="trocarFilial()"><i class="ti ti-building"></i><span id="filialBadgeNome">—</span></div>
     <div class="tb-acts">
-      <div class="ib" onclick="openModal('mDoc')" title="Novo Documento"><i class="ti ti-plus"></i></div>
+      <div class="ib" onclick="newDoc()" title="Novo Documento"><i class="ti ti-plus"></i></div>
       <div class="ib" onclick="toggleNP()" id="npBtn" title="Alertas"><i class="ti ti-bell"></i><div class="bdg" id="bdg" style="display:none">0</div></div>
       <div class="ib" onclick="navigate('cfg')" title="Configurações"><i class="ti ti-settings"></i></div>
       <div class="ib" onclick="doLogout()" title="Sair"><i class="ti ti-logout"></i></div>
@@ -419,7 +419,7 @@ tr.selected td{background:#EBF4F7 !important}
         </div>
       </div>
       <div class="fg"><label class="fl">Status</label><select class="fi" id="dStat"><option value="v">Vigente</option><option value="p">Próximo do Vencimento</option><option value="x">Vencido</option></select></div>
-      <div class="fg" id="fgFilialDoc" style="display:none"><label class="fl">Filial <span style="color:var(--er)">*</span></label>
+      <div class="fg" id="fgFilialDoc" style="display:none"><label class="fl">Filial do Documento <span style="color:var(--er)">*</span></label>
           <select class="fi" id="dFilial"></select>
         </div>
         <div class="fg"><label class="fl">Tags</label><input class="fi" type="text" id="dTags" placeholder="Ex: anvisa, rdc430, bpd"/></div>
@@ -687,7 +687,7 @@ async function saveCfgDB(){
 function applyIdentity(){
   document.getElementById('logoName').textContent = CFG.empresa || 'JC Farmacêutica';
   document.getElementById('logoSub').textContent  = CFG.subtitulo || 'SGQ · GESTÃO DA QUALIDADE';
-  document.getElementById('logoIco').textContent  = (CFG.user_iniciais||'JC').substring(0,2);
+  document.getElementById('logoIco').textContent  = 'JC'; // always JC brand
   document.getElementById('userName').textContent = CFG.user_nome || 'Usuário';
   document.getElementById('userRole').textContent = CFG.user_cargo || '';
   document.getElementById('userAvatar').textContent = (CFG.user_iniciais||'?').substring(0,2);
