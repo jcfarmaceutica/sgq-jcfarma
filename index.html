@@ -858,8 +858,7 @@ async function buildNotifs(){
     .lte('data_validade', new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   // Only show pops review alerts for current filial
   if(filialAtiva && filialAtiva !== 'todas'){
-    if(filialAtiva !== 'Matriz') popsQ = popsQ.in('filial',[filialAtiva,'Matriz']);
-    else popsQ = popsQ.eq('filial','Matriz');
+    popsQ = popsQ.eq('filial',filialAtiva);
   }
   const { data: popsReview } = await popsQ;
   const popsAlerts = (popsReview||[]).map(d => {
@@ -1150,8 +1149,7 @@ async function doSearch(val){
   if(!val){ render(); return; }
   let searchQ = sb.from('documentos').select('*').eq('obsoleto',false).ilike('nome','%'+val+'%');
   if(filialAtiva !== 'todas'){
-    if(filialAtiva === 'Matriz') searchQ = searchQ.eq('filial','Matriz');
-    else searchQ = searchQ.in('filial',[filialAtiva,'Matriz']);
+    searchQ = searchQ.eq('filial',filialAtiva);
   }
   const { data:res } = await searchQ;
   const c = document.getElementById('cnt'); c.className='cnt fade-in';
@@ -1216,12 +1214,8 @@ async function renderTrein(tabObs){
   window._treinObsTab = tabObs;
   let qA = sb.from('treinamentos').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
   let qO = sb.from('treinamentos').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
-  if(filialAtiva !== 'todas' && filialAtiva !== 'Matriz'){
-    const sf2=['GO','DF','MT','MA','PA'];
-    if(sf2.includes(filialAtiva)){ qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']); }
-    else { qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); }
-  } else if(filialAtiva === 'Matriz'){
-    qA=qA.eq('filial','Matriz'); qO=qO.eq('filial','Matriz');
+  if(filialAtiva !== 'todas'){
+    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva);
   }
   const [{ data:TA },{ data:TO }] = await Promise.all([qA, qO]);
   const ativos=TA||[], obs=TO||[];
@@ -1379,12 +1373,8 @@ async function renderAudit(){
   const obsTab = window._audObsTab||false;
   let qA = sb.from('auditorias').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
   let qO = sb.from('auditorias').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
-  if(filialAtiva !== 'todas' && filialAtiva !== 'Matriz'){
-    const sf2=['GO','DF','MT','MA','PA'];
-    if(sf2.includes(filialAtiva)){ qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']); }
-    else { qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); }
-  } else if(filialAtiva === 'Matriz'){
-    qA=qA.eq('filial','Matriz'); qO=qO.eq('filial','Matriz');
+  if(filialAtiva !== 'todas'){
+    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva);
   }
   const [{ data:AA },{ data:AO }] = await Promise.all([qA, qO]);
   const ativos=AA||[], obs=AO||[];
@@ -1593,7 +1583,7 @@ async function render(){
 }
 
 async function renderDash(){
-  const filQ=(t)=>{ if(filialAtiva==='todas') return t; if(filialAtiva==='Matriz') return t.eq('filial','Matriz'); return t.in('filial',[filialAtiva,'Matriz']); };
+  const filQ=(t)=>{ if(filialAtiva==='todas') return t; return t.eq('filial',filialAtiva); };
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
     filQ(sb.from('documentos').select('*')).order('criado_em',{ascending:false}),
@@ -1792,17 +1782,10 @@ async function renderDocs(){
   const obsTab=window._docsObsTab||false;
   let query=sb.from('documentos').select('*').eq('obsoleto',obsTab).order('criado_em',{ascending:false});
   let queryObs=sb.from('documentos').select('id',{count:'exact',head:true}).eq('obsoleto',true);
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz'){
-    // Only distribuidoras share docs with Matriz; TEND TUDO has its own docs
-    const sharedFiliais=['GO','DF','MT','MA','PA'];
-    if(sharedFiliais.includes(filialAtiva)){
-      query=query.in('filial',[filialAtiva,'Matriz']);
-      queryObs=queryObs.in('filial',[filialAtiva,'Matriz']);
-    } else {
-      query=query.eq('filial',filialAtiva);
-      queryObs=queryObs.eq('filial',filialAtiva);
-    }
-  } else if(filialAtiva==='Matriz'){ query=query.eq('filial','Matriz'); queryObs=queryObs.eq('filial','Matriz'); }
+  if(filialAtiva!=='todas'){
+    query=query.eq('filial',filialAtiva);
+    queryObs=queryObs.eq('filial',filialAtiva);
+  }
   if(MMOD[v]){ query=query.eq('modulo',MMOD[v]); queryObs=queryObs.eq('modulo',MMOD[v]); }
   else if(SMAP[v]){ query=query.eq('submodulo',SMAP[v]); queryObs=queryObs.eq('submodulo',SMAP[v]); }
   const [{data:docs},{count:obsCount}]=await Promise.all([query,queryObs]);
@@ -1944,16 +1927,7 @@ async function restaurarDoc(id){ showLoading('Restaurando...'); await sb.from('d
 // ============================================================
 async function renderPastaGrid(v, subNome){
   let pQuery=sb.from('qualif_pastas').select('*').eq('submodulo',subNome).order('nome');
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz'){ pQuery=pQuery.in('filial',[filialAtiva,'Matriz']); }
-  else if(filialAtiva==='Matriz'){ pQuery=pQuery.eq('filial','Matriz'); }
-  const {data:pastas,error:pErr}=await pQuery;
-  if(pErr){toast('Erro ao carregar pastas: '+pErr.message,'d');return;}
-  const P=pastas||[];
-  let counts={};
-  if(P.length>0){
-    const {data:cntRows}=await sb.from('documentos').select('pasta_id').in('pasta_id',P.map(p=>p.id)).eq('obsoleto',false);
-    (cntRows||[]).forEach(r=>{counts[r.pasta_id]=(counts[r.pasta_id]||0)+1;});
-  }
+  if(filialAtiva!=='todas'){ pQuery=pQuery.eq('filial',filialAtiva); }
   const isPops=curV==='pops';
   const pastaDesc=isPops?'POPs — Selecione ou crie uma pasta por procedimento':'Qualificações/Validações — Selecione ou crie uma pasta';
   const pastaEmpty=isPops?'Crie uma pasta para cada POP (ex: POP 001 — Recebimento)':'Crie uma pasta para cada empresa, cliente ou fornecedor';
@@ -2185,8 +2159,7 @@ async function renderOperacional(){
 async function renderOpAnos(subId, subNome){
   // Get distinct years with record counts
   let query=sb.from('registros_operacionais').select('ano').eq('submodulo',subNome).eq('obsoleto',false);
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz') query=query.in('filial',[filialAtiva,'Matriz']);
-  else if(filialAtiva==='Matriz') query=query.eq('filial','Matriz');
+  if(filialAtiva!=='todas') query=query.eq('filial',filialAtiva);
   const {data:rows}=await query;
   const yearMap={};
   (rows||[]).forEach(r=>{yearMap[r.ano]=(yearMap[r.ano]||0)+1;});
@@ -2236,8 +2209,7 @@ async function renderOpAnos(subId, subNome){
 async function renderOpMeses(subId, subNome){
   // Get months with records for the selected year
   let query=sb.from('registros_operacionais').select('mes').eq('submodulo',subNome).eq('ano',curOpAno).eq('obsoleto',false);
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz') query=query.in('filial',[filialAtiva,'Matriz']);
-  else if(filialAtiva==='Matriz') query=query.eq('filial','Matriz');
+  if(filialAtiva!=='todas') query=query.eq('filial',filialAtiva);
   const {data:rows}=await query;
   const mesMap={};
   (rows||[]).forEach(r=>{mesMap[r.mes]=(mesMap[r.mes]||0)+1;});
@@ -2268,8 +2240,7 @@ async function renderOpRegistros(subId, subNome){
   let query=sb.from('registros_operacionais').select('*')
     .eq('submodulo',subNome).eq('ano',curOpAno).eq('mes',curOpMes)
     .eq('obsoleto',false).order('data_registro',{ascending:false});
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz') query=query.in('filial',[filialAtiva,'Matriz']);
-  else if(filialAtiva==='Matriz') query=query.eq('filial','Matriz');
+  if(filialAtiva!=='todas') query=query.eq('filial',filialAtiva);
   const {data:regs}=await query;
   const R=regs||[];
 
