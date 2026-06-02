@@ -709,7 +709,7 @@ function hideLoading(){ const el=document.getElementById('loadingEl'); if(el) el
 const NAV=[
   {id:'dash',ico:'ti-layout-dashboard',lbl:'Dashboard'},
   {sep:true,lbl:'Documentação'},
-  {id:'reg',ico:'ti-license',lbl:'Doc. Regulatória',sub:[{id:'alvaras',lbl:'Alvarás'},{id:'crt',lbl:'CRT'},{id:'cercon',lbl:'Cercon'},{id:'licamb',lbl:'Licença Ambiental'},{id:'projeto',lbl:'Projeto Arquitetônico'},{id:'afe',lbl:'AFE e AE'},{id:'cnpj',lbl:'CNPJ'}]},
+  {id:'reg',ico:'ti-license',lbl:'Doc. Regulatória',sub:[{id:'alv_san',lbl:'Alvará Sanitário'},{id:'alv_func',lbl:'Alvará de Funcionamento'},{id:'crt',lbl:'CRT'},{id:'cercon',lbl:'Cercon'},{id:'licamb',lbl:'Licença Ambiental'},{id:'projeto',lbl:'Projeto Arquitetônico'},{id:'afe',lbl:'AFE e AE'},{id:'cnpj',lbl:'CNPJ'}]},
   {id:'pops',ico:'ti-file-description',lbl:'POPs'},
   {id:'pgrss',ico:'ti-recycle',lbl:'PGRSS'},
   {id:'organo',ico:'ti-sitemap',lbl:'Organograma e MBP'},
@@ -796,7 +796,25 @@ async function buildNotifs(){
   const { data } = await query;
   const notifs = data || [];
 
-  // 2. Dynamic: POPs review alerts (docs in POPs pasta with data_validade approaching)
+  // 2. Dynamic: Retention alerts — obsolete docs approaching 5yr destruction date
+  const hoje0=new Date(); hoje0.setHours(0,0,0,0);
+  const lim180=new Date(hoje0); lim180.setDate(hoje0.getDate()+180);
+  const { data:retDocs } = await sb.from('documentos')
+    .select('id,nome,obsoleto_em,data_destruicao')
+    .eq('obsoleto',true)
+    .not('obsoleto_em','is',null)
+    .lte('data_destruicao', lim180.toISOString().split('T')[0]);
+  const retAlerts=(retDocs||[]).map(d=>{
+    const dl=Math.ceil((new Date(d.data_destruicao)-hoje0)/86400000);
+    return {
+      id:'ret_'+d.id,
+      texto: dl<=0?'🗂 Documento pode ser descartado':'🗂 Descarte previsto em '+dl+' dias',
+      descricao: esc(d.nome)+' · Retenção de 5 anos encerrada',
+      tipo: dl<=0?'er':'wn', lida:false, _dynamic:true
+    };
+  });
+
+  // 3. Dynamic: POPs review alerts (docs in POPs pasta with data_validade approaching)
   let popsQ = sb.from('documentos')
     .select('id,nome,data_validade,filial,pasta_id')
     .eq('obsoleto',false)
@@ -866,7 +884,7 @@ async function buildNotifs(){
     };
   });
 
-  const allNotifs = [...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
+  const allNotifs = [...retAlerts, ...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
   const unread = allNotifs.filter(n=>!n.lida).length;
   const bdg = document.getElementById('bdg');
   bdg.textContent = unread; bdg.style.display = unread ? 'flex' : 'none';
@@ -997,7 +1015,7 @@ function newDoc(){
   document.getElementById('dEmis').value=''; document.getElementById('dVal').value='';
   document.getElementById('dVer').value='1.0'; document.getElementById('dStat').value='v';
   document.getElementById('fInput').value='';
-  const navToMod={reg:'Documentação Regulatória',alvaras:'Documentação Regulatória',crt:'Documentação Regulatória',cercon:'Documentação Regulatória',licamb:'Documentação Regulatória',projeto:'Documentação Regulatória',afe:'Documentação Regulatória',cnpj:'Documentação Regulatória',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Serviços',agua:'Serviços',calib:'Serviços',qterm:'Serviços',bebed:'Serviços',clim:'Serviços',incin:'Serviços',extin:'Serviços',qualif:'Qualificações',qforn:'Qualificações',qcli:'Qualificações',qserv:'Qualificações',qsist:'Qualificações',trein:'Treinamentos',audit:'Auditorias'};
+  const navToMod={reg:'Documentação Regulatória',alv_san:'Documentação Regulatória',alv_func:'Documentação Regulatória',crt:'Documentação Regulatória',cercon:'Documentação Regulatória',licamb:'Documentação Regulatória',projeto:'Documentação Regulatória',afe:'Documentação Regulatória',cnpj:'Documentação Regulatória',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Serviços',agua:'Serviços',calib:'Serviços',qterm:'Serviços',bebed:'Serviços',clim:'Serviços',incin:'Serviços',extin:'Serviços',qualif:'Qualificações',qforn:'Qualificações',qcli:'Qualificações',qserv:'Qualificações',qsist:'Qualificações',trein:'Treinamentos',audit:'Auditorias'};
   document.getElementById('dMod').value=navToMod[curV]||'Documentação Regulatória';
   document.getElementById('dSub').value=SMAP[curV]||'';
   setIndeterminado(false);
@@ -1074,7 +1092,7 @@ async function saveDoc(){
   const payload={ nome, modulo:document.getElementById('dMod').value, submodulo:document.getElementById('dSub').value, responsavel:document.getElementById('dResp').value||'Não informado', data_emissao:document.getElementById('dEmis').value||null, data_validade:isIndet?null:val||null, revisar_em:isPopsPasta&&!isIndet&&val?val:null, versao:document.getElementById('dVer').value||'1.0', status:isIndet?'v':val?calcStat(val):document.getElementById('dStat').value, tags:document.getElementById('dTags').value, observacoes:document.getElementById('dObs').value, filial:docFilial, pasta_id: curPastaId||null, val_indeterminada:isIndet };
   showLoading('Salvando...');
   let docId=id;
-  if(id){ await sb.from('documentos').update(payload).eq('id',id); toast('Documento atualizado!','s'); }
+  if(id){ await sb.from('documentos').update(payload).eq('id',id); toast('Documento atualizado!','s'); logActivity('editar','Documentos',id,nome,''); }
   else { const { data:nd }=await sb.from('documentos').insert(payload).select().single(); docId=nd?.id; toast('Documento salvo!','s'); }
   if(pendingFile&&docId){ await sb.from('arquivos').insert({ documento_id:docId, nome:pendingFile.name, tipo:pendingFile.tipo, tamanho:pendingFile.size, dados:pendingFile.dados }); }
   pendingFile=null; hideLoading(); closeModal('mDoc'); render();
@@ -1084,7 +1102,7 @@ async function delDoc(id){ showLoading('Excluindo...'); await sb.from('documento
 // SEARCH
 async function doSearch(val){
   if(!val){ render(); return; }
-  let searchQ = sb.from('documentos').select('*').ilike('nome','%'+val+'%');
+  let searchQ = sb.from('documentos').select('*').eq('obsoleto',false).ilike('nome','%'+val+'%');
   if(filialAtiva !== 'todas'){
     if(filialAtiva === 'Matriz') searchQ = searchQ.eq('filial','Matriz');
     else searchQ = searchQ.in('filial',[filialAtiva,'Matriz']);
@@ -1098,7 +1116,7 @@ async function doSearch(val){
     'Treinamentos':'trein','Auditorias':'audit'
   };
   const subToNav={
-    'Alvarás':'alvaras','CRT':'crt','Cercon':'cercon','Licença Ambiental':'licamb',
+    'Alvará Sanitário':'alv_san','Alvará de Funcionamento':'alv_func','CRT':'crt','Cercon':'cercon','Licença Ambiental':'licamb',
     'Projeto Arquitetônico':'projeto','AFE e AE':'afe','CNPJ':'cnpj',
     'Dedetização':'dedet',"Limpeza de Caixa d'Água":'agua','Calibração':'calib',
     'Qualificação Térmica':'qterm','Bebedouros':'bebed',
@@ -1409,42 +1427,6 @@ async function restaurarAudit(id){
 // ============================================================
 // FORNECEDORES
 // ============================================================
-async function renderForn(){
-  let fornQ = sb.from('fornecedores').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
-  if(filialAtiva !== 'todas' && filialAtiva !== 'Matriz'){
-    fornQ = fornQ.in('filial',[filialAtiva,'Matriz']);
-  } else if(filialAtiva === 'Matriz'){
-    fornQ = fornQ.eq('filial','Matriz');
-  }
-  const { data:F }=await fornQ;
-  const fns=F||[];
-  let cards='';
-  fns.forEach(f=>{
-    const sc=f.score>=80?'var(--ok)':f.score>=60?'var(--wn)':'var(--er)';
-    const bc=f.score>=80?'#8DC63F':f.score>=60?'#F5A623':'#E53E3E';
-    const dH=(f.docs_situacao||[]).map(d=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd)"><span style="font-size:12.5px">${esc(d.n)}</span>${stB(d.s)}</div>`).join('');
-    cards+=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:18px;box-shadow:var(--sh)">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:8px">
-        <div><div style="font-size:15px;font-weight:800;color:var(--p);font-family:'Nunito',sans-serif">${esc(f.nome)}</div><div style="font-size:11.5px;color:var(--t3);margin-top:2px">CNPJ: ${esc(f.cnpj)}</div></div>
-        <div style="display:flex;gap:4px;flex-shrink:0;align-items:center">${stB(f.status)}<div class="bic edt" data-editforn="${f.id}"><i class="ti ti-edit"></i></div><div class="bic del" data-delforn="${f.id}" data-delnome="${esc(f.nome)}"><i class="ti ti-trash"></i></div></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
-        <div style="text-align:center;flex-shrink:0"><div style="font-size:28px;font-weight:800;font-family:'Nunito',sans-serif;color:${sc}">${f.score}</div><div style="font-size:10px;color:var(--t3)">Score / 100</div></div>
-        <div style="flex:1"><div class="pb" style="height:10px"><div class="pf" style="width:${f.score}%;background:${bc}"></div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="chip p">${esc(f.tipo)}</span><span class="chip l">AFE: ${esc(f.afe)}</span></div></div>
-      </div>
-      <div style="font-size:11px;display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px;color:var(--t2)">
-        <div><span style="color:var(--t3)">Últ. avaliação:</span> ${esc(f.ultima_avaliacao||'—')}</div>
-        <div><span style="color:var(--t3)">Próx. avaliação:</span> ${esc(f.proxima_avaliacao||'—')}</div>
-      </div>
-      ${f.observacoes?`<div style="font-size:12px;color:var(--t3);font-style:italic;margin-bottom:10px;padding:8px 10px;background:var(--bg);border-radius:7px">${esc(f.observacoes)}</div>`:''}
-      ${dH?`<div style="border-top:1px solid var(--bd);padding-top:12px;margin-top:8px"><div style="font-size:10.5px;font-weight:700;color:var(--t2);margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px">Situação Documental</div>${dH}</div>`:''}
-    </div>`;
-  });
-  document.getElementById('cnt').innerHTML=`
-<div class="ph"><div class="ph-l"><div class="ph-bar"></div><div><div class="pt">Qualificação de Fornecedores</div><div class="ps">Cadastro, avaliação, score e situação documental</div></div></div><button class="btn btn-l" id="btnNForn"><i class="ti ti-plus"></i>Novo Fornecedor</button></div>
-<div class="sg3"><div class="kpi b"><div class="kl">Total</div><div class="kv">${fns.length}</div><i class="ti ti-building-store k-ico"></i></div><div class="kpi g"><div class="kl">Qualificados</div><div class="kv s">${fns.filter(f=>f.status==='v').length}</div></div><div class="kpi y"><div class="kl">Em Revisão</div><div class="kv w">${fns.filter(f=>f.status==='p').length}</div></div></div>
-${!fns.length?`<div class="card"><div class="empty"><i class="ti ti-building-off"></i><div class="empty-t">Nenhum fornecedor</div><button class="btn btn-l" style="margin-top:10px" id="btnNForn2"><i class="ti ti-plus"></i>Adicionar</button></div></div>`:`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">${cards}</div>`}`;
-}
 
 function newForn(){
   document.getElementById('fId').value='';
@@ -1521,15 +1503,16 @@ async function saveCfgForm(){
 // ============================================================
 // RENDER CORE
 // ============================================================
-let MMAP={reg:'Documentação Regulatória',alvaras:'Alvarás',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qualif:'Qualificações/Validações',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',operacional:'Operacional',op_temp:'Temperatura e Umidade',op_limp:'Limpeza',op_receb:'Recebimento',op_exped:'Expedição'};
-let SMAP={alvaras:'Alvarás',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',pops:'POPs'};
+let MMAP={reg:'Documentação Regulatória',alv_san:'Alvará Sanitário',alv_func:'Alvará de Funcionamento',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qualif:'Qualificações/Validações',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',operacional:'Operacional',op_temp:'Temperatura e Umidade',op_limp:'Limpeza',op_receb:'Recebimento',op_exped:'Expedição'};
+let SMAP={alv_san:'Alvará Sanitário',alv_func:'Alvará de Funcionamento',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',pops:'POPs'};
 let MMOD={reg:'Documentação Regulatória',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços'};
 const PASTA_VIEWS=['qforn','qcli','qserv','qsist','pops'];
 const OP_VIEWS=['op_temp','op_limp','op_receb','op_exped'];
 // Filiais with Recebimento/Expedição
 const OP_DISTRIB_FILIAIS=['GO','MT','MA'];
 
-function filtDT(v){ document.querySelectorAll('#docTB tr').forEach(r=>{ r.style.display=r.dataset.nome.includes(v.toLowerCase())?'':'none'; }); }
+function filtDT(v){ document.querySelectorAll('#docTB tr[data-nome]').forEach(r=>{ r.style.display=r.dataset.nome.includes(v.toLowerCase())?'':'none'; }); }
+function filtDR(v){ document.querySelectorAll('#docTB tr[data-resp]').forEach(r=>{ r.style.display=(!v||r.dataset.resp===v)?'':'none'; }); }
 function filtDS(v){ document.querySelectorAll('#docTB tr').forEach(r=>{ r.style.display=(!v||r.dataset.stat===v)?'':'none'; }); }
 function filtDD(v){ document.querySelectorAll('#dDBody tr').forEach(r=>{ r.style.display=(!v||r.dataset.st===v)?'':'none'; }); }
 function handleQU(e){ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=ev=>{ pendingFile={name:f.name,size:f.size,tipo:f.type,dados:ev.target.result}; toast('"'+f.name+'" pronto · Abra o formulário para salvar','s'); newDoc(); }; rd.readAsDataURL(f); }
@@ -1568,7 +1551,7 @@ async function renderDash(){
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
     filQ(sb.from('documentos').select('*')).order('criado_em',{ascending:false}),
-    filQ(sb.from('treinamentos').select('id,status')),
+    filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false),
     filQ(sb.from('auditorias').select('id,status,data_validade')),
     filQ(popsRevQ),
   ]);
@@ -1739,8 +1722,11 @@ async function renderDash(){
     if(c1) new Chart(c1,{type:'doughnut',data:{labels:['Vigentes','Próximos','Vencidos'],datasets:[{data:[vigs,prox,venc],backgroundColor:['#27AE60','#F5A623','#E53E3E'],borderWidth:3,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'63%',plugins:{legend:{display:false}}}});
     const mods=['Doc.Reg.','POPs','PGRSS','Serviços','Qualif.','Trein.','Audit.'];
     const mkeys=['Documentação Regulatória','POPs','PGRSS','Serviços','Qualificações','Treinamentos','Auditorias'];
+    const mnavs=['reg','pops','pgrss','servicos','qualif','trein','audit'];
     const c2=document.getElementById('cMod');
-    if(c2) new Chart(c2,{type:'bar',data:{labels:mods,datasets:[{data:mkeys.map(m=>D.filter(d=>d.modulo===m).length),backgroundColor:'#1B4F5E',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'rgba(0,0,0,0.04)'}},x:{ticks:{font:{size:11}},grid:{display:false}}}}});
+    if(c2){
+      const chart2=new Chart(c2,{type:'bar',data:{labels:mods,datasets:[{data:mkeys.map(m=>D.filter(d=>d.modulo===m).length),backgroundColor:'#1B4F5E',hoverBackgroundColor:'#8DC63F',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>'Clique para abrir '+mods[i[0].dataIndex]}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'rgba(0,0,0,0.04)'}},x:{ticks:{font:{size:11}},grid:{display:false}}},onClick:(e,els)=>{ if(els.length>0){ const idx=els[0].index; navigate(mnavs[idx]); toggleNP&&document.getElementById('np').classList.remove('open'); } }}});
+    }
   },80);
 }
 
@@ -1792,7 +1778,7 @@ async function renderDocs(){
         '<i class="ti ti-building" style="margin-right:6px"></i>'+esc(d.filial)+'</td></tr>';
     }
     const _ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status;
-    rows+='<tr data-stat="'+_ls+'" data-nome="'+(d.nome||'').toLowerCase()+'">' +
+    rows+='<tr data-stat="'+_ls+'" data-resp="'+esc(d.responsavel||'')+'" data-nome="'+(d.nome||'').toLowerCase()+'">' +
       '<td style="width:28px"><div class="chk-row" data-chk="'+d.id+'"><i class="ti ti-check" style="font-size:11px"></i></div></td>'+
       '<td><div style="font-weight:600">'+esc(d.nome)+'</div><div style="margin-top:3px">'+tagsHtml+'</div>'+(d.observacoes?'<div style="font-size:10.5px;color:var(--t3);margin-top:2px;font-style:italic">'+esc(d.observacoes)+'</div>':'')+'</td>'+
       '<td><span class="chip p">v'+esc(d.versao||'1.0')+'</span></td>'+
@@ -1840,6 +1826,10 @@ async function renderDocs(){
             '<option value="">Todos os status</option><option value="v">Vigentes</option>'+
             '<option value="p">Próximos</option><option value="x">Vencidos</option>'+
           '</select>'+
+          (D.length?'<select class="fi" style="width:160px;padding:6px 28px 6px 10px;font-size:11.5px" onchange="filtDR(this.value)">'+
+            '<option value="">Todos os resp.</option>'+
+            [...new Set(D.map(d=>d.responsavel).filter(Boolean))].sort().map(r=>'<option value="'+esc(r)+'">'+esc(r)+'</option>').join('')+
+          '</select>':'')+
         '</div>'+
       '</div>'+
       (obsTab?'<div class="al w" style="margin-bottom:12px"><i class="ti ti-info-circle"></i><span style="font-size:12px">Documentos obsoletos são mantidos por 5 anos conforme legislação vigente. Use <strong>Restaurar</strong> para reativar.</span></div>':'')+
@@ -2339,7 +2329,7 @@ async function saveReg(){
   const subNome=OP_SUB_MAP[curV]||curV;
   const d=new Date(data);
   const ano=d.getFullYear(); const mes=d.getMonth()+1;
-  const filial=filialAtiva==='todas'?'GO':filialAtiva;
+  const filial=filialAtiva==='todas'?(FILIAIS[0]?FILIAIS[0].nome:'GO'):filialAtiva;
   const payload={
     submodulo:subNome, ano, mes,
     data_registro:data,
@@ -2429,6 +2419,43 @@ async function goToDoc(docId, navId, parentLabel, subLabel){
   }, 800);
 }
 
+
+// ============================================================
+// LOG DE ATIVIDADES
+// ============================================================
+async function logActivity(acao, modulo, itemId, itemNome, detalhes){
+  try {
+    const { data:{session} } = await sb.auth.getSession();
+    if(!session) return;
+    await sb.from('log_atividades').insert({
+      user_id: session.user.id,
+      user_email: session.user.email,
+      acao, modulo,
+      item_id: itemId || null,
+      item_nome: itemNome || '',
+      filial: filialAtiva === 'todas' ? 'Todas' : filialAtiva,
+      detalhes: detalhes || ''
+    });
+  } catch(e){ /* log silently */ }
+}
+
+
+async function duplicateDoc(id){
+  showLoading('Duplicando...');
+  const {data:d}=await sb.from('documentos').select('*').eq('id',id).single();
+  if(!d){ hideLoading(); toast('Erro ao duplicar','d'); return; }
+  const {data:nd}=await sb.from('documentos').insert({
+    ...d, id:undefined, criado_em:undefined,
+    nome: d.nome+' (cópia)',
+    versao:'1.0', status:'v',
+    obsoleto:false, obsoleto_em:null, obsoleto_por:''
+  }).select().single();
+  hideLoading();
+  toast('"'+d.nome+'" duplicado!','s');
+  logActivity('criar','Documentos',nd?.id,d.nome+' (cópia)','Duplicado de '+id);
+  render();
+}
+
 // ============================================================
 // EVENT DELEGATION
 // ============================================================
@@ -2457,6 +2484,7 @@ document.getElementById('cnt').addEventListener('click', e => {
   const editPasta=t.closest('[data-editpasta]'); if(editPasta){ document.getElementById('pastaId').value=editPasta.dataset.editpasta; document.getElementById('pastaNome').value=editPasta.dataset.pastanome; document.getElementById('pastaSubmod').value=editPasta.dataset.submod||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Renomear Pasta'; openModal('mPasta'); return; }
   const delPasta=t.closest('[data-delpasta]'); if(delPasta){ confirm2(`Excluir a pasta "${delPasta.dataset.pastanome}"?`,()=>deletePasta(delPasta.dataset.delpasta,delPasta.dataset.pastanome)); return; }
   if(t.closest('.back-btn')){ voltarPastas(); return; }
+  if(t.closest('[data-dup]')){ duplicateDoc(t.closest('[data-dup]').dataset.dup); return; }
   if(t.closest('[data-obsdoc]')){ const b=t.closest('[data-obsdoc]'); marcarObsoletoDoc(b.dataset.obsdoc,b.dataset.delnome); return; }
   if(t.closest('[data-restoredoc]')){ restaurarDoc(t.closest('[data-restoredoc]').dataset.restoredoc); return; }
   if(t.closest('[data-chk]')){ toggleChk(t.closest('[data-chk]').dataset.chk); return; }
