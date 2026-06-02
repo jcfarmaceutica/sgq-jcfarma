@@ -1142,7 +1142,8 @@ async function doSearch(val){
     'Treinamentos':'trein','Auditorias':'audit'
   };
   const subToNav={
-    'Alvará Sanitário':'alv_san','Alvará de Funcionamento':'alv_func','CRT':'crt','Cercon':'cercon','Licença Ambiental':'licamb',
+    'Alvará Sanitário':'alv_san','Alvará de Funcionamento':'alv_func',
+    'CRT':'crt','Cercon':'cercon','Licença Ambiental':'licamb',
     'Projeto Arquitetônico':'projeto','AFE e AE':'afe','CNPJ':'cnpj',
     'Dedetização':'dedet',"Limpeza de Caixa d'Água":'agua','Calibração':'calib',
     'Qualificação Térmica':'qterm','Bebedouros':'bebed',
@@ -1156,10 +1157,10 @@ async function doSearch(val){
     const liveStatus = d.data_validade&&!d.val_indeterminada ? calcStat(d.data_validade) : d.status;
     const destLabel = d.submodulo || d.modulo;
     rows +=
-      '<tr style="cursor:pointer" '+
-        'onclick="goToDoc(\''+d.id+'\',\''+navId+'\')" '+
-        'onmouseover="this.style.background=\'var(--pxl)\'" '+
-        'onmouseout="this.style.background=\'\'">'+
+      '<tr class="search-result-row" data-sdocid="'+d.id+'" data-snavid="'+navId+'" '+
+      'style="cursor:pointer" '+
+      'onmouseover="this.style.background=\'var(--pxl)\'" '+
+      'onmouseout="this.style.background=\'\'">'+
         '<td>'+
           '<div style="font-weight:600;color:var(--p)">'+esc(d.nome)+'</div>'+
           '<div style="font-size:11px;color:var(--t3);margin-top:2px">'+
@@ -1606,8 +1607,7 @@ async function renderDash(){
       const fx=fd2.filter(d=>d._liveStatus==='x').length;
       const pct2=fd2.length?Math.round(fv/fd2.length*100):0;
       const bc=pct2>=80?'var(--l)':pct2>=60?'var(--y)':'var(--er)';
-      return '<div onclick="switchDashFilial(\''+f.nome+'\')" '+
-        'style="background:var(--bg);border-radius:10px;padding:14px 16px;border:1px solid var(--bd);cursor:pointer;transition:all .2s" '+
+      return '<div data-switchfilial="'+f.nome+'" style="background:var(--bg);border-radius:10px;padding:14px 16px;border:1px solid var(--bd);cursor:pointer;transition:all .2s" '+
         'onmouseover="this.style.borderColor=\'var(--pl)\';this.style.background=\'var(--pxl)\'" '+
         'onmouseout="this.style.borderColor=\'var(--bd)\';this.style.background=\'var(--bg)\'">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'+
@@ -1679,8 +1679,8 @@ async function renderDash(){
       '<div style="display:flex;align-items:center;gap:10px"><button class="btn btn-o" onclick="exportPDF()" style="font-size:12px"><i class="ti ti-file-type-pdf" style="color:var(--er)"></i>Exportar Relatório</button>'+
       '<span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span></div>'+
     '</div>'+
-    (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" onclick="switchDashFilial(\'todas\')"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
-      FILIAIS.map(f=>'<div class="ftab '+(filialAtiva===f.nome?'act':'')+'" onclick="switchDashFilial(\''+f.nome+'\')">'+esc(f.nome)+'</div>').join('')+
+    (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" onclick="switchDashFilial('todas')"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
+      FILIAIS.map(f=>'<div class="ftab '+(filialAtiva===f.nome?'act':'')+'" data-switchfilial="'+f.nome+'" onclick="switchDashFilial(this.dataset.switchfilial)">'+esc(f.nome)+'</div>').join('')+
     '</div>':'')+
     filialStatsHtml+
     '<div class="kpi-g">'+
@@ -1813,8 +1813,7 @@ async function renderDocs(){
       '<td><span class="chip p">v'+esc(d.versao||'1.0')+'</span></td>'+
       '<td style="color:var(--t2)">'+esc(d.responsavel)+'</td>'+
       '<td>'+fd(d.data_emissao)+'</td>'+
-      '<td><span class="inline-date" data-indet="'+(d.val_indeterminada?'1':'0')+'" onclick="inlineDateEdit(''+d.id+'',''+( d.data_validade||'')+'',this)" title="Clique para editar">'+( d.val_indeterminada?'<span style="color:var(--t3);font-size:12px">Indeterminada</span>':fd(d.data_validade)||'—')+'</span></td>'+
-      '<td>'+dHtml(d.data_validade,d.val_indeterminada)+'</td>'+
+      '<td><span class="inline-date" data-docid="'+d.id+'" data-val="'+(d.data_validade||'')+'" data-indet="'+(d.val_indeterminada?'1':'0')+'" onclick="inlineDateEdit(this.dataset.docid,this.dataset.val,this)" title="Clique para editar">'+( d.val_indeterminada?'<span style="color:var(--t3);font-size:12px">Indeterminada</span>':fd(d.data_validade)||'—')+'</span></td>'+      '<td>'+dHtml(d.data_validade,d.val_indeterminada)+'</td>'+
       '<td>'+(d.val_indeterminada?'<span class="st v"><span class="st-dot"></span>Vigente</span>':stB(d.data_validade?calcStat(d.data_validade):d.status))+'</td>'+
       '<td style="max-width:160px"><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">'+filesHtml+
         '<span class="ftag" data-upload="'+d.id+'"><i class="ti ti-upload"></i>Upload</span>'+
@@ -1865,7 +1864,7 @@ async function renderDocs(){
       '<div id="bulkBar" style="display:none" class="bulk-bar">'+
         '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
         '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete('documentos')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
       '</div>'+
       (!D.length
         ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">'+
@@ -1874,7 +1873,7 @@ async function renderDocs(){
         '</div>'
         :'<div class="tw"><table>'+
           '<thead><tr>'+
-            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk(\'documentos\')"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
+            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk('documentos')"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
             '<th>Documento</th><th>Ver.</th><th>Responsável</th>'+
             '<th>Emissão</th><th>Validade</th><th>Dias Rest.</th>'+
             '<th>Status</th><th>Arquivos</th><th>Ações</th>'+
@@ -2059,7 +2058,7 @@ async function renderDocsDePasta(subNome){
         '<div id="bulkBar" style="display:none" class="bulk-bar">'+
           '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
           '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete('documentos')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
         '</div>'+
         (!D.length
           ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">Nenhum documento nesta pasta</div><button class="btn btn-l" style="margin-top:10px" id="btnNDoc2"><i class="ti ti-plus"></i>Adicionar</button></div>'
@@ -2759,6 +2758,12 @@ async function saveUsr(){
 // ============================================================
 document.getElementById('cnt').addEventListener('click', e => {
   const t=e.target;
+  // Search result row click
+  const searchRow = t.closest('.search-result-row');
+  if(searchRow){ goToDoc(searchRow.dataset.sdocid, searchRow.dataset.snavid); return; }
+  // Switch filial card click
+  const swFilial = t.closest('[data-switchfilial]');
+  if(swFilial){ switchDashFilial(swFilial.dataset.switchfilial); return; }
   // Operacional: year card
   const opAnoCard=t.closest('[data-opano]');
   if(opAnoCard){ curOpAno=parseInt(opAnoCard.dataset.opano); curOpMes=null; render(); return; }
