@@ -1280,12 +1280,12 @@ async function renderTrein(tabObs){
   <div id="bulkBar" style="display:none" class="bulk-bar">
     <span class="bulk-info" id="bulkInfo">0 selecionados</span>
     <button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>
-    <button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete('treinamentos')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>
+    <button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'treinamentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>
   </div>
   ${!tr.length
     ? `<div class="empty"><i class="ti ti-school-off"></i><div class="empty-t">${tabObs?'Nenhum treinamento obsoleto':'Nenhum treinamento cadastrado'}</div>${!tabObs?'<button class="btn btn-l" style="margin-top:10px" id="btnNTrein2"><i class="ti ti-plus"></i>Adicionar</button>':''}</div>`
     : `<div class="tw"><table><thead><tr>
-        <th style="width:28px"><div class="chk-all" id="chkAllTrein" onclick="toggleAllChk('treinamentos')"><i class="ti ti-check" style="font-size:11px"></i></div></th>
+        <th style="width:28px"><div class="chk-all" id="chkAllTrein" onclick="toggleAllChk(\'treinamentos\')"><i class="ti ti-check" style="font-size:11px"></i></div></th>
         <th>Treinamento</th><th>Colaboradores</th><th>Responsável</th><th>Realização</th><th>Validade</th><th>Dias Rest.</th><th>Status</th><th>Eficácia</th><th>Ações</th>
       </tr></thead><tbody id="treinTB">${rows}</tbody></table></div>`
   }
@@ -1690,7 +1690,7 @@ async function renderDash(){
       '<div style="display:flex;align-items:center;gap:10px"><button class="btn btn-o" onclick="exportPDF()" style="font-size:12px"><i class="ti ti-file-type-pdf" style="color:var(--er)"></i>Exportar Relatório</button>'+
       '<span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span></div>'+
     '</div>'+
-    (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" onclick="switchDashFilial('todas')"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
+    (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" data-switchfilial="todas" onclick="switchDashFilial(this.dataset.switchfilial)"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
       FILIAIS.map(f=>'<div class="ftab '+(filialAtiva===f.nome?'act':'')+'" data-switchfilial="'+f.nome+'" onclick="switchDashFilial(this.dataset.switchfilial)">'+esc(f.nome)+'</div>').join('')+
     '</div>':'')+
     filialStatsHtml+
@@ -1875,7 +1875,7 @@ async function renderDocs(){
       '<div id="bulkBar" style="display:none" class="bulk-bar">'+
         '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
         '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete('documentos')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
       '</div>'+
       (!D.length
         ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">'+
@@ -1884,7 +1884,7 @@ async function renderDocs(){
         '</div>'
         :'<div class="tw"><table>'+
           '<thead><tr>'+
-            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk('documentos')"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
+            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk(\'documentos\')"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
             '<th>Documento</th><th>Ver.</th><th>Responsável</th>'+
             '<th>Emissão</th><th>Validade</th><th>Dias Rest.</th>'+
             '<th>Status</th><th>Arquivos</th><th>Ações</th>'+
@@ -2069,7 +2069,7 @@ async function renderDocsDePasta(subNome){
         '<div id="bulkBar" style="display:none" class="bulk-bar">'+
           '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
           '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete('documentos')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
         '</div>'+
         (!D.length
           ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">Nenhum documento nesta pasta</div><button class="btn btn-l" style="margin-top:10px" id="btnNDoc2"><i class="ti ti-plus"></i>Adicionar</button></div>'
