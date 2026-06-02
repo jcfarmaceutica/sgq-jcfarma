@@ -688,14 +688,20 @@ let filialAtiva = 'Matriz'; // filial currently being viewed
 let isMatriz = false; // true if user has access to all filiais
 let cfgId = null;
 
+const ADMIN_EMAILS_AUTH=['anna@jcfarmaceutica.com.br','responsaveltecnico@tendtudofarma.com.br'];
+
 async function loadCfg(userId){
   const { data } = await sb.from('configuracoes').select('*').eq('user_id', userId).single();
   if(data){ CFG = { ...CFG, ...data }; cfgId = data.id; }
   else {
-    const { data: session } = await sb.auth.getSession();
-    const email = session?.session?.user?.email || '';
+    // No config yet — create default with email as nome, acesso total
+    const { data: sessData } = await sb.auth.getSession();
+    const email = sessData?.session?.user?.email || '';
     CFG.user_nome = email.split('@')[0];
     CFG.user_iniciais = (email.substring(0,2)).toUpperCase();
+    CFG.filial_acesso = 'todas';
+    // Auto-save so admins can see and edit later
+    await saveCfgDB();
   }
   isMatriz = (CFG.filial_acesso === 'todas');
   // Load filiais list
@@ -2739,7 +2745,8 @@ async function renderUsuarios(){
       '<td><div style="display:flex;align-items:center;gap:10px">'+
         '<div style="width:32px;height:32px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">'+esc((u.user_iniciais||'?').substring(0,2))+'</div>'+
         '<div><div style="font-weight:600">'+esc(u.user_nome||'—')+'</div>'+
-        '<div style="font-size:11px;color:var(--t3)">'+esc(u.user_cargo||'—')+'</div></div>'+
+        '<div style="font-size:11px;color:var(--t3)">'+esc(u.user_cargo||'—')+'</div>'+
+        '<div style="font-size:10.5px;color:var(--t3);margin-top:1px">'+esc(u.user_email||'')+'</div></div>'+
       '</div></td>'+
       '<td><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--pxl);border:1px solid var(--bd2);color:var(--p)">'+esc(u.filial_acesso||'todas')+'</span></td>'+
       '<td style="font-size:12px;color:var(--t2)">'+(u.alert_dias||30)+' dias</td>'+
