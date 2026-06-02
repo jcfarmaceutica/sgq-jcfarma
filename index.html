@@ -539,10 +539,12 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // AUTH — LOGIN / LOGOUT
 // ============================================================
 async function checkAuth(){
-  // Always sign out on page load to force fresh login every time
-  await sb.auth.signOut();
-  // Show login page
+  try {
+    await sb.auth.signOut();
+  } catch(e){ console.log('signOut error:', e); }
   document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('filialPage').style.display = 'none';
 }
 
 document.getElementById('btnLogin').addEventListener('click', async () => {
@@ -554,16 +556,23 @@ document.getElementById('btnLogin').addEventListener('click', async () => {
   const btn = document.getElementById('btnLogin');
   btn.disabled = true;
   btn.innerHTML='<i class="ti ti-loader-2" style="animation:spin .7s linear infinite"></i>Entrando...';
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  let data, error;
+  try {
+    const resp = await sb.auth.signInWithPassword({ email, password: pass });
+    data = resp.data; error = resp.error;
+  } catch(e) {
+    error = e;
+  }
   btn.disabled = false;
   btn.innerHTML='<i class="ti ti-login"></i>Entrar no Sistema';
   if(error){
-    err.textContent = error.message?.includes('Invalid') ? 'E-mail ou senha incorretos.' : 'Erro ao entrar. Tente novamente.';
+    err.textContent = (error.message||'').includes('Invalid') ? 'E-mail ou senha incorretos.' : 'Erro ao entrar. Tente novamente.';
     err.style.display='block';
     document.getElementById('loginPass').value='';
     document.getElementById('loginPass').focus();
     return;
   }
+  if(!data?.user){ err.textContent='Erro inesperado. Tente novamente.'; err.style.display='block'; return; }
   showApp(data.user);
 });
 
@@ -2586,37 +2595,7 @@ async function exportPDF(){
       <button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
     </div>
   
-<!-- MODAL EDITAR USUÁRIO -->
-<div class="mo" id="mUsr">
-  <div class="md sm">
-    <div class="mh">
-      <div class="mt"><i class="ti ti-user-edit" style="color:var(--l)"></i>Editar Usuário</div>
-      <div class="bic" onclick="closeModal('mUsr')"><i class="ti ti-x"></i></div>
-    </div>
-    <div class="mb">
-      <input type="hidden" id="usrCfgId"/>
-      <div class="fr">
-        <div class="fg"><label class="fl">Nome</label><input class="fi" type="text" id="usrNome"/></div>
-        <div class="fg"><label class="fl">Cargo</label><input class="fi" type="text" id="usrCargo"/></div>
-      </div>
-      <div class="fr">
-        <div class="fg"><label class="fl">Iniciais</label><input class="fi" type="text" id="usrIni" maxlength="2" style="text-transform:uppercase"/></div>
-        <div class="fg"><label class="fl">Alerta (dias)</label><input class="fi" type="number" id="usrDias" min="7" max="365"/></div>
-      </div>
-      <div class="fg"><label class="fl">Filial de Acesso</label>
-        <select class="fi" id="usrFilial">
-          <option value="todas">Todas (Matriz)</option>
-        </select>
-      </div>
-    </div>
-    <div class="mf">
-      <button class="btn btn-o" onclick="closeModal('mUsr')">Cancelar</button>
-      <button class="btn btn-l" onclick="saveUsr()"><i class="ti ti-check"></i>Salvar</button>
-    </div>
-  </div>
-</div>
-
-</body></html>`;
+  </body></html>`;
 
   hideLoading();
   const w=window.open('','_blank');
