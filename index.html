@@ -1518,12 +1518,6 @@ function rCfg(){
 <div class="cfg-row"><div><div class="cfg-lbl">Nome Completo</div><div class="cfg-sub">Exibido no rodapé da barra lateral</div></div><input class="fi" style="width:260px" type="text" id="cfgName" value="${esc(CFG.user_nome)}"/></div>
 <div class="cfg-row"><div><div class="cfg-lbl">Cargo / Função</div></div><input class="fi" style="width:260px" type="text" id="cfgRole" value="${esc(CFG.user_cargo)}"/></div>
 <div class="cfg-row"><div><div class="cfg-lbl">Iniciais do Avatar</div><div class="cfg-sub">Até 2 letras</div></div><input class="fi" style="width:80px" type="text" id="cfgIni" value="${esc(CFG.user_iniciais)}" maxlength="2"/></div></div>
-<div class="cfg-sec"><div class="cfg-sec-hd"><i class="ti ti-building"></i>Acesso por Filial</div>
-<div class="cfg-row"><div><div class="cfg-lbl">Filial de acesso deste usuário</div><div class="cfg-sub">"Todas" = acesso de matriz. Selecione uma filial para restringir.</div></div>
-<select class="fi" style="width:200px" id="cfgFilialAcesso">
-  <option value="todas" ${CFG.filial_acesso==='todas'?'selected':''}>Todas (Matriz)</option>
-  ${FILIAIS.map(f=>`<option value="${esc(f.nome)}" ${CFG.filial_acesso===f.nome?'selected':''}>${esc(f.nome)}</option>`).join('')}
-</select></div></div>
 <div class="cfg-sec"><div class="cfg-sec-hd"><i class="ti ti-bell"></i>Alertas</div>
 <div class="cfg-row"><div><div class="cfg-lbl">Dias de antecedência para alertas</div><div class="cfg-sub">Documentos dentro deste prazo aparecem como "Próximo ao vencimento"</div></div><input class="fi" style="width:80px" type="number" id="cfgDias" value="${CFG.alert_dias}" min="1" max="365"/></div>
 <div class="cfg-row"><div><div class="cfg-lbl">Notificações no sistema</div></div><div class="tog ${CFG.notif_sistema?'on':''}" id="togS" onclick="togCfg('notif_sistema','togS')"></div></div></div>
@@ -1539,7 +1533,6 @@ async function saveCfgForm(){
   CFG.user_cargo=document.getElementById('cfgRole').value.trim();
   CFG.user_iniciais=(document.getElementById('cfgIni').value.trim()||'?').substring(0,2).toUpperCase();
   CFG.alert_dias=parseInt(document.getElementById('cfgDias').value)||30;
-  CFG.filial_acesso=document.getElementById('cfgFilialAcesso').value||'todas';
   isMatriz=(CFG.filial_acesso==='todas');
   showLoading('Salvando...'); await saveCfgDB(); hideLoading(); applyIdentity(); toast('Configurações salvas!','s');
 }
