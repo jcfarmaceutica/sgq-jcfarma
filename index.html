@@ -641,6 +641,9 @@ function trocarFilial(){
 
 async function launchApp(){
   document.getElementById('app').style.display = 'flex';
+  // Store current user email for admin checks
+  const {data:{session:sess0}} = await sb.auth.getSession();
+  window._currentEmail = sess0?.user?.email||'';
   // Update badge
   const badge = document.getElementById('filialBadge');
   const badgeNome = document.getElementById('filialBadgeNome');
@@ -1687,7 +1690,7 @@ async function renderDash(){
         '<div class="pt">Dashboard — Visão Geral</div>'+
         '<div class="ps">'+(filialAtiva==='todas'?'Todas as Filiais':esc(filialAtiva))+'</div>'+
       '</div></div>'+
-      '<div style="display:flex;align-items:center;gap:10px"><button class="btn btn-o" onclick="exportPDF()" style="font-size:12px"><i class="ti ti-file-type-pdf" style="color:var(--er)"></i>Exportar Relatório</button>'+
+      '<div style="display:flex;align-items:center;gap:10px"><button class="btn btn-o" id="btnExportPDF" style="font-size:12px"><i class="ti ti-file-type-pdf" style="color:var(--er)"></i>'+(filialAtiva==='todas'?'Relatório Geral':'Exportar '+filialAtiva)+'</button>'+
       '<span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span></div>'+
     '</div>'+
     (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" data-switchfilial="todas" onclick="switchDashFilial(this.dataset.switchfilial)"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
@@ -2529,14 +2532,14 @@ async function showHistory(docId){
 }
 
 
-async function exportPDF(){
+async function exportPDF(targetFilial){
+  if(!targetFilial) targetFilial = filialAtiva;
   showLoading('Gerando relatório...');
-  // Build HTML for print
   const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const filialLabel = filialAtiva==='todas'?'Todas as Filiais':filialAtiva;
+  const filialLabel = targetFilial==='todas'?'Todas as Filiais':targetFilial;
 
   let q = sb.from('documentos').select('*').eq('obsoleto',false).order('modulo').order('nome');
-  if(filialAtiva!=='todas') q=q.in('filial',[filialAtiva,'Matriz']);
+  if(targetFilial!=='todas') q=q.in('filial',[targetFilial,'Matriz']);
   const {data:docs}=await q;
   const D=docs||[];
   D.forEach(d=>{ d._ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; });
@@ -2642,6 +2645,16 @@ function inlineDateEdit(docId, currentVal, cell){
 
 
 async function renderLog(){
+  const {data:{session:sess2}} = await sb.auth.getSession();
+  const email2 = sess2?.user?.email||'';
+  if(!ADMIN_EMAILS.includes(email2)){
+    document.getElementById('cnt').innerHTML=
+      '<div class="card"><div class="empty"><i class="ti ti-lock"></i>'+
+      '<div class="empty-t">Acesso restrito</div>'+
+      '<p style="font-size:12.5px;color:var(--t3)">Apenas administradores podem ver o log.</p>'+
+      '</div></div>';
+    return;
+  }
   const { data:logs } = await sb.from('log_atividades')
     .select('*').order('criado_em',{ascending:false}).limit(200);
   const L = logs||[];
@@ -2697,8 +2710,20 @@ async function clearLog(){
 }
 
 
+const ADMIN_EMAILS=['anna@jcfarmaceutica.com.br','responsaveltecnico@tendtudofarma.com.br'];
+
 async function renderUsuarios(){
-  if(!isMatriz){ document.getElementById('cnt').innerHTML='<div class="card"><div class="empty"><i class="ti ti-lock"></i><div class="empty-t">Acesso restrito à matriz</div></div></div>'; return; }
+  // Check if current user is an admin
+  const {data:{session}} = await sb.auth.getSession();
+  const currentEmail = session?.user?.email||'';
+  if(!ADMIN_EMAILS.includes(currentEmail)){
+    document.getElementById('cnt').innerHTML=
+      '<div class="card"><div class="empty"><i class="ti ti-lock"></i>'+
+      '<div class="empty-t">Acesso restrito</div>'+
+      '<p style="font-size:12.5px;color:var(--t3)">Apenas administradores podem gerenciar usuários.</p>'+
+      '</div></div>';
+    return;
+  }
   const {data:cfgs}=await sb.from('configuracoes').select('*').order('user_nome');
   const C=cfgs||[];
   let rows='';
@@ -2769,6 +2794,8 @@ async function saveUsr(){
 // ============================================================
 document.getElementById('cnt').addEventListener('click', e => {
   const t=e.target;
+  // Export PDF button
+  if(t.closest('#btnExportPDF')){ exportPDF(filialAtiva); return; }
   // Search result row click
   const searchRow = t.closest('.search-result-row');
   if(searchRow){ goToDoc(searchRow.dataset.sdocid, searchRow.dataset.snavid); return; }
