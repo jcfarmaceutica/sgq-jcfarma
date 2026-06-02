@@ -887,6 +887,16 @@ async function markRead(id){ await sb.from('notificacoes').update({ lida:true })
 async function markAllRead(){ await sb.from('notificacoes').update({ lida:true }).eq('lida',false); buildNotifs(); toast('Todas marcadas como lidas','s'); }
 function toggleNP(){ document.getElementById('np').classList.toggle('open'); }
 
+async function clearAllNotifs(){
+  confirm2('Limpar todas as notificações? Os alertas automáticos continuarão aparecendo.', async ()=>{
+    await sb.from('notificacoes').delete().neq('id','00000000-0000-0000-0000-000000000000');
+    buildNotifs();
+    // Close panel
+    document.getElementById('np').classList.remove('open');
+    toast('Notificações limpas!','s');
+  });
+}
+
 // ============================================================
 // FILE UPLOAD
 // ============================================================
