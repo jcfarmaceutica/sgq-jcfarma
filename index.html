@@ -1211,7 +1211,9 @@ async function renderTrein(tabObs){
   let qA = sb.from('treinamentos').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
   let qO = sb.from('treinamentos').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
   if(filialAtiva !== 'todas' && filialAtiva !== 'Matriz'){
-    qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']);
+    const sf2=['GO','DF','MT','MA','PA'];
+    if(sf2.includes(filialAtiva)){ qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']); }
+    else { qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); }
   } else if(filialAtiva === 'Matriz'){
     qA=qA.eq('filial','Matriz'); qO=qO.eq('filial','Matriz');
   }
@@ -1372,7 +1374,9 @@ async function renderAudit(){
   let qA = sb.from('auditorias').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
   let qO = sb.from('auditorias').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
   if(filialAtiva !== 'todas' && filialAtiva !== 'Matriz'){
-    qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']);
+    const sf2=['GO','DF','MT','MA','PA'];
+    if(sf2.includes(filialAtiva)){ qA=qA.in('filial',[filialAtiva,'Matriz']); qO=qO.in('filial',[filialAtiva,'Matriz']); }
+    else { qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); }
   } else if(filialAtiva === 'Matriz'){
     qA=qA.eq('filial','Matriz'); qO=qO.eq('filial','Matriz');
   }
@@ -1789,10 +1793,19 @@ async function renderDocs(){
   const obsTab=window._docsObsTab||false;
   let query=sb.from('documentos').select('*').eq('obsoleto',obsTab).order('criado_em',{ascending:false});
   let queryObs=sb.from('documentos').select('id',{count:'exact',head:true}).eq('obsoleto',true);
-  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz'){ query=query.in('filial',[filialAtiva,'Matriz']); queryObs=queryObs.in('filial',[filialAtiva,'Matriz']); }
-  else if(filialAtiva==='Matriz'){ query=query.eq('filial','Matriz'); queryObs=queryObs.eq('filial','Matriz'); }
+  if(filialAtiva!=='todas'&&filialAtiva!=='Matriz'){
+    // Only distribuidoras share docs with Matriz; TEND TUDO has its own docs
+    const sharedFiliais=['GO','DF','MT','MA','PA'];
+    if(sharedFiliais.includes(filialAtiva)){
+      query=query.in('filial',[filialAtiva,'Matriz']);
+      queryObs=queryObs.in('filial',[filialAtiva,'Matriz']);
+    } else {
+      query=query.eq('filial',filialAtiva);
+      queryObs=queryObs.eq('filial',filialAtiva);
+    }
+  } else if(filialAtiva==='Matriz'){ query=query.eq('filial','Matriz'); queryObs=queryObs.eq('filial','Matriz'); }
   if(MMOD[v]){ query=query.eq('modulo',MMOD[v]); queryObs=queryObs.eq('modulo',MMOD[v]); }
-  else if(SMAP[v]){ query=query.ilike('submodulo',SMAP[v]); queryObs=queryObs.ilike('submodulo',SMAP[v]); }
+  else if(SMAP[v]){ query=query.eq('submodulo',SMAP[v]); queryObs=queryObs.eq('submodulo',SMAP[v]); }
   const [{data:docs},{count:obsCount}]=await Promise.all([query,queryObs]);
   const D=docs||[]; const _obsCount=obsCount||0;
   // Live status recalculation
