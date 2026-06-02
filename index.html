@@ -314,6 +314,12 @@ tr.selected td{background:#EBF4F7 !important}
 /* EFICACIA ALERT */
 .tl-d.efic{background:#9C27B0}
 .np-i.efic-alert .np-t{color:#7B1FA2}
+
+/* INLINE DATE EDIT */
+.inline-date{cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;transition:all .15s}
+.inline-date:hover{background:var(--pxl);color:var(--p)}
+.inline-date:hover::after{content:'✏️';font-size:10px;margin-left:2px}
+.inline-date-input{border:1px solid var(--l);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--sur);color:var(--p);font-family:inherit}
 </style>
 </head>
 <body>
@@ -727,7 +733,7 @@ const NAV=[
   {id:'trein',ico:'ti-school',lbl:'Treinamentos'},
   {id:'audit',ico:'ti-clipboard-check',lbl:'Auditorias'},
   {sep:true,lbl:'Sistema'},
-  {id:'cfg',ico:'ti-settings',lbl:'Configurações'},
+  {id:'cfg',ico:'ti-settings',lbl:'Configurações'},{id:'log',ico:'ti-list-details',lbl:'Log de Atividades'},{id:'usuarios',ico:'ti-users',lbl:'Usuários'},
 ];
 let curV='dash', curParent=null, curLabel=null, sbCol=false, openNav={}, curPastaId=null, curPastaNome='', curOpAno=null, curOpMes=null;
 
@@ -1092,7 +1098,18 @@ async function saveDoc(){
   const payload={ nome, modulo:document.getElementById('dMod').value, submodulo:document.getElementById('dSub').value, responsavel:document.getElementById('dResp').value||'Não informado', data_emissao:document.getElementById('dEmis').value||null, data_validade:isIndet?null:val||null, revisar_em:isPopsPasta&&!isIndet&&val?val:null, versao:document.getElementById('dVer').value||'1.0', status:isIndet?'v':val?calcStat(val):document.getElementById('dStat').value, tags:document.getElementById('dTags').value, observacoes:document.getElementById('dObs').value, filial:docFilial, pasta_id: curPastaId||null, val_indeterminada:isIndet };
   showLoading('Salvando...');
   let docId=id;
-  if(id){ await sb.from('documentos').update(payload).eq('id',id); toast('Documento atualizado!','s'); logActivity('editar','Documentos',id,nome,''); }
+  if(id){ // Save current version before updating
+    const {data:curr}=await sb.from('documentos').select('*').eq('id',id).single();
+    if(curr){
+      await sb.from('documento_versoes').insert({
+        documento_id:id, versao:curr.versao||'1.0', nome:curr.nome,
+        responsavel:curr.responsavel, data_emissao:curr.data_emissao,
+        data_validade:curr.data_validade, observacoes:curr.observacoes,
+        alterado_por:CFG.user_nome||'usuário'
+      });
+    }
+    await sb.from('documentos').update(payload).eq('id',id);
+    toast('Documento atualizado!','s'); logActivity('editar','Documentos',id,nome,''); }
   else { const { data:nd }=await sb.from('documentos').insert(payload).select().single(); docId=nd?.id; toast('Documento salvo!','s'); }
   if(pendingFile&&docId){ await sb.from('arquivos').insert({ documento_id:docId, nome:pendingFile.name, tipo:pendingFile.tipo, tamanho:pendingFile.size, dados:pendingFile.dados }); }
   pendingFile=null; hideLoading(); closeModal('mDoc'); render();
@@ -1539,6 +1556,8 @@ async function render(){
   c.innerHTML='<div class="empty"><div class="spin" style="margin:0 auto"></div></div>';
   if(curV==='dash'){ await renderDash(); return; }
   if(curV==='cfg'){ c.innerHTML=rCfg(); return; }
+  if(curV==='log'){ await renderLog(); return; }
+  if(curV==='usuarios'){ await renderUsuarios(); return; }
   if(curV==='trein'){ await renderTrein(); return; }
   if(curV==='audit'){ await renderAudit(); return; }
   if(PASTA_VIEWS.includes(curV)){ await renderQualif(); return; }
@@ -1648,7 +1667,8 @@ async function renderDash(){
         '<div class="pt">Dashboard — Visão Geral</div>'+
         '<div class="ps">'+(filialAtiva==='todas'?'Todas as Filiais':esc(filialAtiva))+'</div>'+
       '</div></div>'+
-      '<span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span>'+
+      '<div style="display:flex;align-items:center;gap:10px"><button class="btn btn-o" onclick="exportPDF()" style="font-size:12px"><i class="ti ti-file-type-pdf" style="color:var(--er)"></i>Exportar Relatório</button>'+
+      '<span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span></div>'+
     '</div>'+
     (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" onclick="switchDashFilial(\'todas\')"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
       FILIAIS.map(f=>'<div class="ftab '+(filialAtiva===f.nome?'act':'')+'" onclick="switchDashFilial(\''+f.nome+'\')">'+esc(f.nome)+'</div>').join('')+
@@ -1784,7 +1804,7 @@ async function renderDocs(){
       '<td><span class="chip p">v'+esc(d.versao||'1.0')+'</span></td>'+
       '<td style="color:var(--t2)">'+esc(d.responsavel)+'</td>'+
       '<td>'+fd(d.data_emissao)+'</td>'+
-      '<td>'+(d.val_indeterminada?'<span style="color:var(--t3);font-size:12px">Indeterminada</span>':fd(d.data_validade))+'</td>'+
+      '<td><span class="inline-date" data-indet="'+(d.val_indeterminada?'1':'0')+'" onclick="inlineDateEdit(''+d.id+'',''+( d.data_validade||'')+'',this)" title="Clique para editar">'+( d.val_indeterminada?'<span style="color:var(--t3);font-size:12px">Indeterminada</span>':fd(d.data_validade)||'—')+'</span></td>'+
       '<td>'+dHtml(d.data_validade,d.val_indeterminada)+'</td>'+
       '<td>'+(d.val_indeterminada?'<span class="st v"><span class="st-dot"></span>Vigente</span>':stB(d.data_validade?calcStat(d.data_validade):d.status))+'</td>'+
       '<td style="max-width:160px"><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">'+filesHtml+
@@ -2456,6 +2476,305 @@ async function duplicateDoc(id){
   render();
 }
 
+
+async function showHistory(docId){
+  openModal('mHist');
+  const {data:vers}=await sb.from('documento_versoes')
+    .select('*').eq('documento_id',docId)
+    .order('alterado_em',{ascending:false});
+  const {data:curr}=await sb.from('documentos').select('nome,versao').eq('id',docId).single();
+  const V=vers||[];
+  let html='';
+  if(!V.length){
+    html='<div class="empty"><i class="ti ti-history"></i><div class="empty-t">Nenhuma versão anterior registrada</div><p style="font-size:12px;color:var(--t3)">O histórico é criado automaticamente a partir da próxima edição</p></div>';
+  } else {
+    html='<div style="font-size:12px;color:var(--t3);margin-bottom:12px">Versão atual: <strong>v'+esc(curr?.versao||'—')+'</strong> — '+esc(curr?.nome||'')+'</div>';
+    html+='<div style="border-left:2px solid var(--bd);padding-left:16px">';
+    V.forEach((v,i)=>{
+      html+=
+        '<div style="position:relative;margin-bottom:16px">'+
+        '<div style="position:absolute;left:-21px;top:4px;width:10px;height:10px;border-radius:50%;background:'+(i===0?'var(--l)':'var(--bd2)')+'"></div>'+
+        '<div style="font-weight:700;font-size:13px;color:var(--p)">v'+esc(v.versao)+'</div>'+
+        '<div style="font-size:11.5px;color:var(--t2);margin-top:2px">'+esc(v.nome||'—')+'</div>'+
+        '<div style="font-size:11px;color:var(--t3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap">'+
+          '<span><i class="ti ti-user" style="font-size:10px"></i> '+esc(v.alterado_por||'—')+'</span>'+
+          '<span><i class="ti ti-calendar" style="font-size:10px"></i> '+fd(v.alterado_em?.split('T')[0])+'</span>'+
+          (v.data_validade?'<span><i class="ti ti-clock" style="font-size:10px"></i> Val: '+fd(v.data_validade)+'</span>':'')+
+        '</div>'+
+        (v.observacoes?'<div style="font-size:11px;color:var(--t3);font-style:italic;margin-top:3px">'+esc(v.observacoes)+'</div>':'')+
+        '</div>';
+    });
+    html+='</div>';
+  }
+  document.getElementById('mHistBody').innerHTML=html;
+}
+
+
+async function exportPDF(){
+  showLoading('Gerando relatório...');
+  // Build HTML for print
+  const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const filialLabel = filialAtiva==='todas'?'Todas as Filiais':filialAtiva;
+
+  let q = sb.from('documentos').select('*').eq('obsoleto',false).order('modulo').order('nome');
+  if(filialAtiva!=='todas') q=q.in('filial',[filialAtiva,'Matriz']);
+  const {data:docs}=await q;
+  const D=docs||[];
+  D.forEach(d=>{ d._ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; });
+
+  const vigs=D.filter(d=>d._ls==='v').length;
+  const prox=D.filter(d=>d._ls==='p').length;
+  const venc=D.filter(d=>d._ls==='x').length;
+  const pct=D.length?Math.round(vigs/D.length*100):0;
+
+  // Group by modulo
+  const byMod={};
+  D.forEach(d=>{ if(!byMod[d.modulo]) byMod[d.modulo]=[]; byMod[d.modulo].push(d); });
+
+  const stLabel={v:'Vigente',p:'Próximo ao Venc.',x:'Vencido'};
+  const stColor={v:'#27AE60',p:'#F5A623',x:'#E53E3E'};
+
+  let modHtml='';
+  Object.entries(byMod).forEach(([mod,docs2])=>{
+    modHtml+=`<h3 style="color:#1B4F5E;border-bottom:1px solid #ddd;padding-bottom:4px;margin:20px 0 8px">${mod} (${docs2.length})</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">
+      <thead><tr style="background:#f5f5f5">
+        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Documento</th>
+        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Responsável</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Validade</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Status</th>
+      </tr></thead><tbody>`;
+    docs2.forEach(d=>{
+      modHtml+=`<tr>
+        <td style="padding:5px 8px;border:1px solid #eee">${d.nome}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;color:#666">${d.responsavel||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${d.filial||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${d.data_validade?d.data_validade.split('-').reverse().join('/'):(d.val_indeterminada?'Indeterminada':'—')}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:${stColor[d._ls]||'#666'};font-weight:700">${stLabel[d._ls]||d._ls}</td>
+      </tr>`;
+    });
+    modHtml+='</tbody></table>';
+  });
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Relatório SGQ — ${CFG.empresa}</title>
+    <style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{color:#1B4F5E}h2{color:#1B4F5E}@media print{.no-print{display:none}}
+/* INLINE DATE EDIT */
+.inline-date{cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;transition:all .15s}
+.inline-date:hover{background:var(--pxl);color:var(--p)}
+.inline-date:hover::after{content:'✏️';font-size:10px;margin-left:2px}
+.inline-date-input{border:1px solid var(--l);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--sur);color:var(--p);font-family:inherit}
+</style>
+  </head><body>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:2px solid #1B4F5E;padding-bottom:12px">
+      <div><h1 style="margin:0">${CFG.empresa}</h1><div style="color:#666;font-size:12px">${CFG.subtitulo} · Relatório de Conformidade</div></div>
+      <div style="text-align:right;font-size:11px;color:#666"><div>Data: ${hoje}</div><div>Filial: ${filialLabel}</div><div>Gerado por: ${CFG.user_nome||'—'}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
+      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #1B4F5E"><div style="font-size:28px;font-weight:800;color:#1B4F5E">${D.length}</div><div style="font-size:11px;color:#666">Total</div></div>
+      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #27AE60"><div style="font-size:28px;font-weight:800;color:#27AE60">${vigs}</div><div style="font-size:11px;color:#666">Vigentes</div></div>
+      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #F5A623"><div style="font-size:28px;font-weight:800;color:#F5A623">${prox}</div><div style="font-size:11px;color:#666">Próximos</div></div>
+      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #E53E3E"><div style="font-size:28px;font-weight:800;color:#E53E3E">${venc}</div><div style="font-size:11px;color:#666">Vencidos</div></div>
+    </div>
+    <div style="background:#f0f7e6;border-radius:8px;padding:12px;margin-bottom:20px;text-align:center;font-size:14px;font-weight:700;color:#1B4F5E">Índice de Conformidade: ${pct}%</div>
+    ${modHtml}
+    <div style="margin-top:30px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center">
+      Relatório gerado pelo SGQ JC Farmacêutica em ${hoje} — Confidencial
+    </div>
+    <div class="no-print" style="margin-top:20px;text-align:center">
+      <button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+  
+<!-- MODAL EDITAR USUÁRIO -->
+<div class="mo" id="mUsr">
+  <div class="md sm">
+    <div class="mh">
+      <div class="mt"><i class="ti ti-user-edit" style="color:var(--l)"></i>Editar Usuário</div>
+      <div class="bic" onclick="closeModal('mUsr')"><i class="ti ti-x"></i></div>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="usrCfgId"/>
+      <div class="fr">
+        <div class="fg"><label class="fl">Nome</label><input class="fi" type="text" id="usrNome"/></div>
+        <div class="fg"><label class="fl">Cargo</label><input class="fi" type="text" id="usrCargo"/></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Iniciais</label><input class="fi" type="text" id="usrIni" maxlength="2" style="text-transform:uppercase"/></div>
+        <div class="fg"><label class="fl">Alerta (dias)</label><input class="fi" type="number" id="usrDias" min="7" max="365"/></div>
+      </div>
+      <div class="fg"><label class="fl">Filial de Acesso</label>
+        <select class="fi" id="usrFilial">
+          <option value="todas">Todas (Matriz)</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-o" onclick="closeModal('mUsr')">Cancelar</button>
+      <button class="btn btn-l" onclick="saveUsr()"><i class="ti ti-check"></i>Salvar</button>
+    </div>
+  </div>
+</div>
+
+</body></html>`;
+
+  hideLoading();
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(), 500);
+}
+
+
+// ============================================================
+// INLINE DATE EDITING
+// ============================================================
+function inlineDateEdit(docId, currentVal, cell){
+  const isIndet = cell.dataset.indet === '1';
+  if(isIndet) return;
+  const inp = document.createElement('input');
+  inp.type='date'; inp.className='inline-date-input';
+  inp.value = currentVal||'';
+  cell.innerHTML='';
+  cell.appendChild(inp);
+  inp.focus();
+  const save = async ()=>{
+    const newVal = inp.value;
+    if(newVal === currentVal){ render(); return; }
+    showLoading('Salvando...');
+    const newStatus = newVal ? calcStat(newVal) : 'v';
+    await sb.from('documentos').update({data_validade:newVal||null, status:newStatus}).eq('id',docId);
+    logActivity('editar','Documentos',docId,'','Data de validade atualizada');
+    hideLoading(); render();
+  };
+  inp.addEventListener('blur', save);
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter') inp.blur(); if(e.key==='Escape'){render();} });
+}
+
+
+async function renderLog(){
+  const { data:logs } = await sb.from('log_atividades')
+    .select('*').order('criado_em',{ascending:false}).limit(200);
+  const L = logs||[];
+
+  const acaoIco={
+    'criar':'ti-circle-plus','editar':'ti-edit','arquivar':'ti-archive',
+    'restaurar':'ti-refresh','excluir':'ti-trash','login':'ti-login'
+  };
+  const acaoCor={
+    'criar':'var(--ok)','editar':'var(--p)','arquivar':'var(--wn)',
+    'restaurar':'var(--l)','excluir':'var(--er)','login':'var(--t3)'
+  };
+
+  let rows='';
+  L.forEach(l=>{
+    const ico=acaoIco[l.acao]||'ti-activity';
+    const cor=acaoCor[l.acao]||'var(--t2)';
+    const dt=l.criado_em?new Date(l.criado_em).toLocaleString('pt-BR'):'—';
+    rows+=
+      '<tr>'+
+      '<td style="width:32px"><i class="ti '+ico+'" style="color:'+cor+';font-size:16px"></i></td>'+
+      '<td><div style="font-weight:600;font-size:12.5px">'+esc(l.item_nome||l.acao)+'</div>'+
+        '<div style="font-size:11px;color:var(--t3)">'+esc(l.modulo||'—')+(l.filial?' · '+esc(l.filial):'')+'</div></td>'+
+      '<td style="font-size:12px;color:var(--t2)">'+esc(l.user_email||'—')+'</td>'+
+      '<td><span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bg);border:1px solid var(--bd2);color:'+cor+'">'+esc(l.acao)+'</span></td>'+
+      '<td style="font-size:11.5px;color:var(--t3)">'+dt+'</td>'+
+      '</tr>';
+  });
+
+  document.getElementById('cnt').innerHTML=
+    '<div class="ph"><div class="ph-l"><div class="ph-bar"></div><div>'+
+      '<div class="pt">Log de Atividades</div>'+
+      '<div class="ps">Registro de todas as ações no sistema (últimas 200)</div>'+
+    '</div></div>'+
+    '<button class="btn btn-o" onclick="clearLog()" style="font-size:12px"><i class="ti ti-trash"></i>Limpar Log</button>'+
+    '</div>'+
+    '<div class="card">'+
+      (!L.length
+        ?'<div class="empty"><i class="ti ti-list-details"></i><div class="empty-t">Nenhuma atividade registrada ainda</div></div>'
+        :'<div class="tw"><table>'+
+          '<thead><tr><th style="width:32px"></th><th>Item</th><th>Usuário</th><th>Ação</th><th>Data/Hora</th></tr></thead>'+
+          '<tbody>'+rows+'</tbody>'+
+        '</table></div>')+
+    '</div>';
+}
+
+async function clearLog(){
+  confirm2('Limpar todo o log de atividades?', async()=>{
+    showLoading('Limpando...');
+    await sb.from('log_atividades').delete().neq('id','00000000-0000-0000-0000-000000000000');
+    hideLoading(); toast('Log limpo!','s'); renderLog();
+  });
+}
+
+
+async function renderUsuarios(){
+  if(!isMatriz){ document.getElementById('cnt').innerHTML='<div class="card"><div class="empty"><i class="ti ti-lock"></i><div class="empty-t">Acesso restrito à matriz</div></div></div>'; return; }
+  const {data:cfgs}=await sb.from('configuracoes').select('*').order('user_nome');
+  const C=cfgs||[];
+  let rows='';
+  C.forEach(u=>{
+    rows+=
+      '<tr>'+
+      '<td><div style="display:flex;align-items:center;gap:10px">'+
+        '<div style="width:32px;height:32px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">'+esc((u.user_iniciais||'?').substring(0,2))+'</div>'+
+        '<div><div style="font-weight:600">'+esc(u.user_nome||'—')+'</div>'+
+        '<div style="font-size:11px;color:var(--t3)">'+esc(u.user_cargo||'—')+'</div></div>'+
+      '</div></td>'+
+      '<td><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--pxl);border:1px solid var(--bd2);color:var(--p)">'+esc(u.filial_acesso||'todas')+'</span></td>'+
+      '<td style="font-size:12px;color:var(--t2)">'+(u.alert_dias||30)+' dias</td>'+
+      '<td><div class="bic edt" data-editusr="'+u.id+'" title="Editar"><i class="ti ti-edit"></i></div></td>'+
+      '</tr>';
+  });
+
+  document.getElementById('cnt').innerHTML=
+    '<div class="ph"><div class="ph-l"><div class="ph-bar"></div><div>'+
+      '<div class="pt">Gerenciar Usuários</div>'+
+      '<div class="ps">Configure o acesso e perfil de cada usuário</div>'+
+    '</div></div></div>'+
+    '<div class="al w" style="margin-bottom:14px"><i class="ti ti-info-circle"></i><span style="font-size:12px">Para criar novos usuários, acesse <strong>Supabase → Authentication → Users → Add user</strong>. Após criar, o usuário aparecerá aqui automaticamente no primeiro login.</span></div>'+
+    '<div class="card">'+
+      (!C.length
+        ?'<div class="empty"><i class="ti ti-users"></i><div class="empty-t">Nenhum usuário cadastrado</div></div>'
+        :'<div class="tw"><table>'+
+          '<thead><tr><th>Usuário</th><th>Filial de Acesso</th><th>Alerta (dias)</th><th>Ações</th></tr></thead>'+
+          '<tbody id="usrTB">'+rows+'</tbody>'+
+        '</table></div>')+
+    '</div>';
+}
+
+
+async function editUsr(cfgId){
+  const {data:u}=await sb.from('configuracoes').select('*').eq('id',cfgId).single();
+  if(!u) return;
+  document.getElementById('usrCfgId').value=u.id;
+  document.getElementById('usrNome').value=u.user_nome||'';
+  document.getElementById('usrCargo').value=u.user_cargo||'';
+  document.getElementById('usrIni').value=u.user_iniciais||'';
+  document.getElementById('usrDias').value=u.alert_dias||30;
+  const sel=document.getElementById('usrFilial');
+  sel.innerHTML='<option value="todas">Todas (Matriz)</option>'+
+    FILIAIS.map(f=>'<option value="'+esc(f.nome)+'">'+esc(f.nome)+'</option>').join('');
+  sel.value=u.filial_acesso||'todas';
+  openModal('mUsr');
+}
+
+async function saveUsr(){
+  const id=document.getElementById('usrCfgId').value;
+  if(!id) return;
+  const payload={
+    user_nome:document.getElementById('usrNome').value.trim(),
+    user_cargo:document.getElementById('usrCargo').value.trim(),
+    user_iniciais:(document.getElementById('usrIni').value.trim()||'?').substring(0,2).toUpperCase(),
+    alert_dias:parseInt(document.getElementById('usrDias').value)||30,
+    filial_acesso:document.getElementById('usrFilial').value||'todas'
+  };
+  showLoading('Salvando...');
+  await sb.from('configuracoes').update(payload).eq('id',id);
+  hideLoading(); closeModal('mUsr'); toast('Usuário atualizado!','s');
+  renderUsuarios();
+}
+
 // ============================================================
 // EVENT DELEGATION
 // ============================================================
@@ -2481,9 +2800,11 @@ document.getElementById('cnt').addEventListener('click', e => {
   const pastaCard = t.closest('.pasta-card');
   if(pastaCard && !t.closest('.pasta-actions')){ curPastaId=pastaCard.dataset.pastaid; curPastaNome=pastaCard.dataset.pastanome; render(); return; }
   if(t.closest('#btnNPasta')||t.closest('#btnNPasta2')){ const btn=t.closest('#btnNPasta')||t.closest('#btnNPasta2'); document.getElementById('pastaId').value=''; document.getElementById('pastaNome').value=''; document.getElementById('pastaSubmod').value=btn.dataset.submod||SMAP[curV]||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-folder-plus" style="color:var(--l)"></i>Nova Pasta'; openModal('mPasta'); return; }
+  const editUsrEl=t.closest('[data-editusr]'); if(editUsrEl){ editUsr(editUsrEl.dataset.editusr); return; }
   const editPasta=t.closest('[data-editpasta]'); if(editPasta){ document.getElementById('pastaId').value=editPasta.dataset.editpasta; document.getElementById('pastaNome').value=editPasta.dataset.pastanome; document.getElementById('pastaSubmod').value=editPasta.dataset.submod||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Renomear Pasta'; openModal('mPasta'); return; }
   const delPasta=t.closest('[data-delpasta]'); if(delPasta){ confirm2(`Excluir a pasta "${delPasta.dataset.pastanome}"?`,()=>deletePasta(delPasta.dataset.delpasta,delPasta.dataset.pastanome)); return; }
   if(t.closest('.back-btn')){ voltarPastas(); return; }
+  if(t.closest('[data-hist]')){ showHistory(t.closest('[data-hist]').dataset.hist); return; }
   if(t.closest('[data-dup]')){ duplicateDoc(t.closest('[data-dup]').dataset.dup); return; }
   if(t.closest('[data-obsdoc]')){ const b=t.closest('[data-obsdoc]'); marcarObsoletoDoc(b.dataset.obsdoc,b.dataset.delnome); return; }
   if(t.closest('[data-restoredoc]')){ restaurarDoc(t.closest('[data-restoredoc]').dataset.restoredoc); return; }
@@ -2569,6 +2890,52 @@ checkAuth();
     <div class="mf">
       <button class="btn btn-o" onclick="closeModal('mPasta')">Cancelar</button>
       <button class="btn btn-l" onclick="savePasta()"><i class="ti ti-check"></i>Salvar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL HISTÓRICO DE VERSÕES -->
+<div class="mo" id="mHist">
+  <div class="md">
+    <div class="mh">
+      <div class="mt"><i class="ti ti-history" style="color:var(--l)"></i>Histórico de Versões</div>
+      <div class="bic" onclick="closeModal('mHist')"><i class="ti ti-x"></i></div>
+    </div>
+    <div class="mb" id="mHistBody" style="min-height:120px">
+      <div class="empty"><div class="spin" style="margin:0 auto"></div></div>
+    </div>
+    <div class="mf"><button class="btn btn-o" onclick="closeModal('mHist')">Fechar</button></div>
+  </div>
+</div>
+
+
+<!-- MODAL EDITAR USUÁRIO -->
+<div class="mo" id="mUsr">
+  <div class="md sm">
+    <div class="mh">
+      <div class="mt"><i class="ti ti-user-edit" style="color:var(--l)"></i>Editar Usuário</div>
+      <div class="bic" onclick="closeModal('mUsr')"><i class="ti ti-x"></i></div>
+    </div>
+    <div class="mb">
+      <input type="hidden" id="usrCfgId"/>
+      <div class="fr">
+        <div class="fg"><label class="fl">Nome</label><input class="fi" type="text" id="usrNome"/></div>
+        <div class="fg"><label class="fl">Cargo</label><input class="fi" type="text" id="usrCargo"/></div>
+      </div>
+      <div class="fr">
+        <div class="fg"><label class="fl">Iniciais</label><input class="fi" type="text" id="usrIni" maxlength="2" style="text-transform:uppercase"/></div>
+        <div class="fg"><label class="fl">Alerta (dias)</label><input class="fi" type="number" id="usrDias" min="7" max="365"/></div>
+      </div>
+      <div class="fg"><label class="fl">Filial de Acesso</label>
+        <select class="fi" id="usrFilial">
+          <option value="todas">Todas (Matriz)</option>
+        </select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-o" onclick="closeModal('mUsr')">Cancelar</button>
+      <button class="btn btn-l" onclick="saveUsr()"><i class="ti ti-check"></i>Salvar</button>
     </div>
   </div>
 </div>
