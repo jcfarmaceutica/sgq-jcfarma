@@ -1636,15 +1636,24 @@ function setIndeterminado(v){
 async function render(){
   const c=document.getElementById('cnt'); c.className='cnt fade-in';
   c.innerHTML='<div class="empty"><div class="spin" style="margin:0 auto"></div></div>';
-  if(curV==='dash'){ await renderDash(); return; }
-  if(curV==='cfg'){ c.innerHTML=rCfg(); return; }
-  if(curV==='log'){ await renderLog(); return; }
-  if(curV==='usuarios'){ await renderUsuarios(); return; }
-  if(curV==='trein'){ await renderTrein(); return; }
-  if(curV==='audit'){ await renderAudit(); return; }
-  if(PASTA_VIEWS.includes(curV)){ await renderQualif(); return; }
-  if(OP_VIEWS.includes(curV)){ await renderOperacional(); return; }
-  await renderDocs();
+  try {
+    if(curV==='dash'){ await renderDash(); return; }
+    if(curV==='cfg'){ c.innerHTML=rCfg(); return; }
+    if(curV==='log'){ await renderLog(); return; }
+    if(curV==='usuarios'){ await renderUsuarios(); return; }
+    if(curV==='trein'){ await renderTrein(); return; }
+    if(curV==='audit'){ await renderAudit(); return; }
+    if(PASTA_VIEWS.includes(curV)){ await renderQualif(); return; }
+    if(OP_VIEWS.includes(curV)){ await renderOperacional(); return; }
+    await renderDocs();
+  } catch(e){
+    console.error('render() error:', e);
+    c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er);font-size:32px"></i>'+
+      '<div class="empty-t">Erro ao carregar página</div>'+
+      '<p style="font-size:12px;color:var(--t3);margin-top:8px">'+esc(e.message||'Erro desconhecido')+'</p>'+
+      '<button class="btn btn-o" style="margin-top:12px" onclick="render()">Tentar novamente</button>'+
+      '</div></div>';
+  }
 }
 
 async function renderDash(){
@@ -1992,6 +2001,7 @@ async function restaurarDoc(id){ showLoading('Restaurando...'); await sb.from('d
 // PASTA FUNCTIONS (Qualif + POPs)
 // ============================================================
 async function renderPastaGrid(v, subNome){
+  try {
   let pQuery=sb.from('qualif_pastas').select('*').eq('submodulo',subNome).order('nome');
   if(filialAtiva!=='todas'){ pQuery=pQuery.eq('filial',filialAtiva); }
   const isPops=curV==='pops';
@@ -2056,8 +2066,11 @@ async function renderPastaGrid(v, subNome){
     '</div></div>'+
     '<button class="btn btn-l" id="btnNPasta" data-submod="'+esc(subNome)+'"><i class="ti ti-folder-plus"></i>Nova Pasta</button>'+
     '</div>'+bodyHtml;
+  } catch(e){
+    document.getElementById('cnt').innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar pastas</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p></div></div>';
+    console.error('renderPastaGrid:',e);
+  }
 }
-
 async function renderDocsDePasta(subNome){
   try{
     const {data:docs,error:docErr}=await sb.from('documentos').select('*').eq('pasta_id',curPastaId).eq('obsoleto',false).order('criado_em',{ascending:false});
