@@ -963,7 +963,25 @@ async function buildNotifs(){
     };
   });
 
-  const allNotifs = [...retAlerts, ...audDynAlerts, ...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
+  // Audit due alerts
+  let auditAlerts2 = [];
+  try {
+    let audQ2 = sb.from('auditorias').select('id,tipo_auditoria,proxima_auditoria,filial').not('proxima_auditoria','is',null);
+    if(filialAtiva !== 'todas') audQ2 = audQ2.eq('filial',filialAtiva);
+    const {data:proximasAud} = await audQ2;
+    const hj = new Date(); hj.setHours(0,0,0,0);
+    auditAlerts2 = (proximasAud||[]).filter(a=>{
+      const dias = Math.ceil((new Date(a.proxima_auditoria)-hj)/86400000);
+      return dias <= (CFG.alert_dias||30);
+    }).map(a=>{
+      const dias = Math.ceil((new Date(a.proxima_auditoria)-hj)/86400000);
+      return { id:'aud_'+a.id, texto: dias<=0?'Auditoria vencida':'Auditoria em '+dias+' dias',
+        descricao: esc(a.tipo_auditoria||'Auditoria')+(a.filial?' · '+esc(a.filial):''),
+        tipo: dias<=0?'er':dias<=7?'wn':'in', lida:false, _dynamic:true };
+    });
+  } catch(e){ auditAlerts2=[]; }
+
+  const allNotifs = [...retAlerts, ...auditAlerts2, ...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
   const unread = allNotifs.filter(n=>!n.lida).length;
   const bdg = document.getElementById('bdg');
   bdg.textContent = unread; bdg.style.display = unread ? 'flex' : 'none';
