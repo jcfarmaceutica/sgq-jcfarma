@@ -1651,7 +1651,7 @@ async function renderDash(){
   const filQ=(t)=>{ if(filialAtiva==='todas') return t; return t.eq('filial',filialAtiva); };
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
-    filQ(sb.from('documentos').select('*')).order('criado_em',{ascending:false}),
+    filQ(sb.from('documentos').select('*')).eq('obsoleto',false).order('criado_em',{ascending:false}),
     filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false),
     filQ(sb.from('auditorias').select('id,status,data_validade')),
     filQ(popsRevQ),
@@ -2596,177 +2596,105 @@ async function showHistory(docId){
 async function exportPDF(targetFilial){
   if(!targetFilial) targetFilial = filialAtiva;
   showLoading('Gerando relatório...');
-  const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const filialLabel = targetFilial==='todas'?'Todas as Filiais':targetFilial;
+  try {
+    const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const filialLabel = targetFilial==='todas'?'Todas as Filiais':targetFilial;
 
-  let q = sb.from('documentos').select('*').eq('obsoleto',false).order('modulo').order('nome');
-  if(targetFilial!=='todas') q=q.in('filial',[targetFilial,'Matriz']);
-  const {data:docs}=await q;
-  const D=docs||[];
-  D.forEach(d=>{ d._ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; });
+    // Fetch documents
+    let qD = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).order('modulo').order('nome');
+    if(targetFilial!=='todas') qD=qD.eq('filial',targetFilial);
+    const {data:docsR}=await qD;
+    const D=docsR||[];
+    D.forEach(d=>{ d._ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; });
 
-  const vigs=D.filter(d=>d._ls==='v').length;
-  const prox=D.filter(d=>d._ls==='p').length;
-  const venc=D.filter(d=>d._ls==='x').length;
-  const pct=D.length?Math.round(vigs/D.length*100):0;
+    const vigs=D.filter(d=>d._ls==='v').length;
+    const prox=D.filter(d=>d._ls==='p').length;
+    const venc=D.filter(d=>d._ls==='x').length;
+    const pct=D.length?Math.round(vigs/D.length*100):0;
 
-  // Group by modulo
-  const byMod={};
-  D.forEach(d=>{ if(!byMod[d.modulo]) byMod[d.modulo]=[]; byMod[d.modulo].push(d); });
+    // Fetch treinamentos
+    let qT2 = sb.from('treinamentos').select('nome,tipo,filial,data_realizacao,avaliacao_eficacia').eq('obsoleto',false).order('nome');
+    if(targetFilial!=='todas') qT2=qT2.eq('filial',targetFilial);
+    const {data:treinsR}=await qT2;
+    const TR=treinsR||[];
 
-  const stLabel={v:'Vigente',p:'Próximo ao Venc.',x:'Vencido'};
-  const stColor={v:'#27AE60',p:'#F5A623',x:'#E53E3E'};
+    // Fetch auditorias
+    let qA2 = sb.from('auditorias').select('nome,tipo_auditoria,filial,data_auditoria,resultado').order('data_auditoria',{ascending:false});
+    if(targetFilial!=='todas') qA2=qA2.eq('filial',targetFilial);
+    const {data:auditsR}=await qA2;
+    const AR=auditsR||[];
 
+    // Build docs table grouped by module
+    const byMod={};
+    D.forEach(d=>{ if(!byMod[d.modulo]) byMod[d.modulo]=[]; byMod[d.modulo].push(d); });
+    const stLabel={v:'Vigente',p:'Próximo ao Venc.',x:'Vencido'};
+    const stColor={v:'#27AE60',p:'#F5A623',x:'#E53E3E'};
 
-  // Fetch treinamentos
-  let tQ = sb.from('treinamentos').select('*').eq('obsoleto',false).order('nome');
-  if(targetFilial!=='todas') tQ=tQ.eq('filial',targetFilial);
-  const {data:pdfTreins}=await tQ;
-  const pdfT=pdfTreins||[];
-
-  // Fetch auditorias
-  let aQ = sb.from('auditorias').select('*').order('data_auditoria',{ascending:false});
-  if(targetFilial!=='todas') aQ=aQ.eq('filial',targetFilial);
-  const {data:pdfAudits}=await aQ;
-  const A=pdfAudits||[];
-
-  const stLabelT={Inicial:'Inicial',Periódico:'Periódico',Reciclagem:'Reciclagem',Específico:'Específico'};
-
-  let modHtml='';
-  Object.entries(byMod).forEach(([mod,docs2])=>{
-    modHtml+=`<h3 style="color:#1B4F5E;border-bottom:1px solid #ddd;padding-bottom:4px;margin:20px 0 8px">${mod} (${docs2.length})</h3>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">
-      <thead><tr style="background:#f5f5f5">
-        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Documento</th>
-        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Responsável</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Validade</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Status</th>
-      </tr></thead><tbody>`;
-    docs2.forEach(d=>{
-      modHtml+=`<tr>
-        <td style="padding:5px 8px;border:1px solid #eee">${d.nome}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;color:#666">${d.responsavel||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${d.filial||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${d.data_validade?d.data_validade.split('-').reverse().join('/'):(d.val_indeterminada?'Indeterminada':'—')}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:${stColor[d._ls]||'#666'};font-weight:700">${stLabel[d._ls]||d._ls}</td>
-      </tr>`;
+    let modRows='';
+    Object.entries(byMod).forEach(([mod,mDocs])=>{
+      modRows+='<h3 style="color:#1B4F5E;border-bottom:1px solid #ddd;padding-bottom:4px;margin:20px 0 8px">'+mod+' ('+mDocs.length+')</h3>';
+      modRows+='<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px">';
+      modRows+='<thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Documento</th><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Responsável</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Validade</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Status</th></tr></thead><tbody>';
+      mDocs.forEach(d=>{
+        const val = d.data_validade?d.data_validade.split('-').reverse().join('/'):(d.val_indeterminada?'Indeterminada':'—');
+        const sc = stColor[d._ls]||'#666';
+        const sl = stLabel[d._ls]||'—';
+        modRows+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+esc(d.nome)+'</td><td style="padding:5px 8px;border:1px solid #eee;color:#666">'+esc(d.responsavel||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">'+esc(d.filial||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+val+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:'+sc+';font-weight:700">'+sl+'</td></tr>';
+      });
+      modRows+='</tbody></table>';
     });
-    modHtml+='</tbody></table>';
-  });
 
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>Relatório SGQ — ${CFG.empresa}</title>
-    <style>body{font-family:Arial,sans-serif;margin:30px;color:#222}h1{color:#1B4F5E}h2{color:#1B4F5E}@media print{.no-print{display:none}}
-/* INLINE DATE EDIT */
-.inline-date{cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:5px;transition:all .15s}
-.inline-date:hover{background:var(--pxl);color:var(--p)}
-.inline-date:hover::after{content:'✏️';font-size:10px;margin-left:2px}
-.inline-date-input{border:1px solid var(--l);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--sur);color:var(--p);font-family:inherit}
-</style>
-  </head><body>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:2px solid #1B4F5E;padding-bottom:12px">
-      <div><h1 style="margin:0">${CFG.empresa}</h1><div style="color:#666;font-size:12px">${CFG.subtitulo} · Relatório de Conformidade</div></div>
-      <div style="text-align:right;font-size:11px;color:#666"><div>Data: ${hoje}</div><div>Filial: ${filialLabel}</div><div>Gerado por: ${CFG.user_nome||'—'}</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
-      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #1B4F5E"><div style="font-size:28px;font-weight:800;color:#1B4F5E">${D.length}</div><div style="font-size:11px;color:#666">Total</div></div>
-      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #27AE60"><div style="font-size:28px;font-weight:800;color:#27AE60">${vigs}</div><div style="font-size:11px;color:#666">Vigentes</div></div>
-      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #F5A623"><div style="font-size:28px;font-weight:800;color:#F5A623">${prox}</div><div style="font-size:11px;color:#666">Próximos</div></div>
-      <div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #E53E3E"><div style="font-size:28px;font-weight:800;color:#E53E3E">${venc}</div><div style="font-size:11px;color:#666">Vencidos</div></div>
-    </div>
-    <div style="background:#f0f7e6;border-radius:8px;padding:12px;margin-bottom:20px;text-align:center;font-size:14px;font-weight:700;color:#1B4F5E">Índice de Conformidade: ${pct}%</div>
-    ${modHtml}
-    <div style="margin-top:30px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center">
-      Relatório gerado pelo SGQ JC Farmacêutica em ${hoje} — Confidencial
-    </div>
-    ${pdfT.length ? `
-    <h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Treinamentos (${pdfT.length})</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px">
-      <thead><tr style="background:#f5f5f5">
-        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Treinamento</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Realização</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Eficácia</th>
-      </tr></thead><tbody>
-      ${pdfT.map(t=>`<tr>
-        <td style="padding:5px 8px;border:1px solid #eee">${t.nome||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${t.tipo||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${t.filial||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${t.data_realizacao?t.data_realizacao.split('-').reverse().join('/'):'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:${t.avaliacao_eficacia==='Eficaz'?'#27AE60':t.avaliacao_eficacia?'#E53E3E':'#999'}">${t.avaliacao_eficacia||'Pendente'}</td>
-      </tr>`).join('')}
-      </tbody>
-    </table>` : ''}
-    ${pdfA.length ? `
-    <h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Auditorias (${pdfA.length})</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px">
-      <thead><tr style="background:#f5f5f5">
-        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Auditoria</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Data</th>
-        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Resultado</th>
-      </tr></thead><tbody>
-      ${pdfA.map(a=>`<tr>
-        <td style="padding:5px 8px;border:1px solid #eee">${a.nome||a.tipo_auditoria||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${a.tipo_auditoria||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${a.filial||'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${a.data_auditoria?a.data_auditoria.split('-').reverse().join('/'):'—'}</td>
-        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${a.resultado||'—'}</td>
-      </tr>`).join('')}
-      </tbody>
-    </table>` : ''}
-    <div class="no-print" style="margin-top:20px;text-align:center">
-      <button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
-    </div>
-  
-  </body></html>`;
+    // Build trein table
+    let treinRows='';
+    if(TR.length){
+      treinRows='<h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Treinamentos ('+TR.length+')</h2>';
+      treinRows+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Treinamento</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Realização</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Eficácia</th></tr></thead><tbody>';
+      TR.forEach(t=>{
+        const ec = t.avaliacao_eficacia==='Eficaz'?'#27AE60':t.avaliacao_eficacia?'#E53E3E':'#999';
+        treinRows+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+esc(t.nome||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+esc(t.tipo||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+esc(t.filial||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(t.data_realizacao?t.data_realizacao.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:'+ec+';font-weight:700">'+esc(t.avaliacao_eficacia||'Pendente')+'</td></tr>';
+      });
+      treinRows+='</tbody></table>';
+    }
 
-  hideLoading();
-  // Fetch treinamentos
-  let qT = sb.from('treinamentos').select('nome,tipo,responsavel,data_realizacao,avaliacao_eficacia,status').eq('obsoleto',false).order('nome');
-  if(targetFilial!=='todas') qT=qT.eq('filial',targetFilial);
-  const {data:treins}=await qT;
-  const pdfT2=treins||[];
+    // Build audit table
+    let auditRows='';
+    if(AR.length){
+      auditRows='<h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Auditorias ('+AR.length+')</h2>';
+      auditRows+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Auditoria</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Data</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Resultado</th></tr></thead><tbody>';
+      AR.forEach(a=>{
+        auditRows+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+esc(a.nome||a.tipo_auditoria||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+esc(a.tipo_auditoria||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+esc(a.filial||'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(a.data_auditoria?a.data_auditoria.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+esc(a.resultado||'—')+'</td></tr>';
+      });
+      auditRows+='</tbody></table>';
+    }
 
-  // Fetch auditorias
-  let qA = sb.from('auditorias').select('tipo,data_auditoria,responsavel,status,proxima_auditoria').order('data_auditoria',{ascending:false});
-  if(targetFilial!=='todas') qA=qA.eq('filial',targetFilial);
-  const {data:auds}=await qA;
-  const AU=auds||[];
+    // Assemble full HTML
+    let html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório SGQ — '+CFG.empresa+'</title>';
+    html+='<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}@media print{.no-print{display:none}}</style></head><body>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:2px solid #1B4F5E;padding-bottom:12px">';
+    html+='<div><h1 style="margin:0;color:#1B4F5E">'+esc(CFG.empresa)+'</h1><div style="color:#666;font-size:12px">'+esc(CFG.subtitulo)+' · Relatório de Conformidade</div></div>';
+    html+='<div style="text-align:right;font-size:11px;color:#666"><div>Data: '+hoje+'</div><div>Filial: '+esc(filialLabel)+'</div><div>Gerado por: '+esc(CFG.user_nome||'—')+'</div></div></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">';
+    html+='<div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #1B4F5E"><div style="font-size:28px;font-weight:800;color:#1B4F5E">'+D.length+'</div><div style="font-size:11px;color:#666">Total</div></div>';
+    html+='<div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #27AE60"><div style="font-size:28px;font-weight:800;color:#27AE60">'+vigs+'</div><div style="font-size:11px;color:#666">Vigentes</div></div>';
+    html+='<div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #F5A623"><div style="font-size:28px;font-weight:800;color:#F5A623">'+prox+'</div><div style="font-size:11px;color:#666">Próximos</div></div>';
+    html+='<div style="background:#f8f8f8;border-radius:8px;padding:14px;text-align:center;border-top:3px solid #E53E3E"><div style="font-size:28px;font-weight:800;color:#E53E3E">'+venc+'</div><div style="font-size:11px;color:#666">Vencidos</div></div></div>';
+    html+='<div style="background:#f0f7e6;border-radius:8px;padding:12px;margin-bottom:20px;text-align:center;font-size:14px;font-weight:700;color:#1B4F5E">Índice de Conformidade: '+pct+'%</div>';
+    html+=modRows+treinRows+auditRows;
+    html+='<div style="margin-top:30px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center">Relatório gerado pelo SGQ JC Farmacêutica em '+hoje+' — Confidencial</div>';
+    html+='<div class="no-print" style="margin-top:20px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Imprimir / Salvar PDF</button></div>';
+    html+='</body></html>';
 
-  let treinHtml='';
-  if(pdfT.length){
-    treinHtml='<h2 style="color:#1B4F5E;margin:24px 0 8px">Treinamentos</h2>';
-    treinHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Treinamento</th><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Realização</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Eficácia</th></tr></thead><tbody>';
-    T.forEach(t=>{
-      const ef=t.avaliacao_eficacia||'Pendente';
-      const efColor=ef==='Eficaz'?'#27AE60':ef==='Ineficaz'?'#E53E3E':'#F5A623';
-      treinHtml+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+t.nome+'</td><td style="padding:5px 8px;border:1px solid #eee;color:#666">'+t.tipo+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(t.data_realizacao?t.data_realizacao.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:'+efColor+';font-weight:700">'+ef+'</td></tr>';
-    });
-    treinHtml+='</tbody></table>';
+    hideLoading();
+    const w=window.open('','_blank');
+    if(!w){ toast('Permita pop-ups para gerar o relatório','d'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(), 800);
+  } catch(e){
+    hideLoading();
+    toast('Erro ao gerar relatório: '+e.message,'d');
+    console.error('exportPDF error:',e);
   }
-
-  let audHtml='';
-  if(AU.length){
-    audHtml='<h2 style="color:#1B4F5E;margin:24px 0 8px">Auditorias</h2>';
-    audHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Data</th><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Responsável</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Próxima</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Status</th></tr></thead><tbody>';
-    AU.forEach(a=>{
-      audHtml+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+a.tipo+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(a.data_auditoria?a.data_auditoria.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee">'+a.responsavel+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(a.proxima_auditoria?a.proxima_auditoria.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+a.status+'</td></tr>';
-    });
-    audHtml+='</tbody></table>';
-  }
-
-  // Insert into html before closing
-  const htmlFinal = html.replace('</body>', treinHtml+audHtml+'</body>');
-
-  hideLoading();
-  const w=window.open('','_blank');
-  w.document.write(htmlFinal);
-  w.document.close();
-  setTimeout(()=>w.print(), 500);
 }
 
 
