@@ -526,6 +526,8 @@ tr.selected td{background:#EBF4F7 !important}
 
 <script>
 window.onerror=function(m,s,l,c,e){
+  // Ignore cross-origin errors (line 0, Script error) from CDN scripts
+  if(l===0||m==='Script error.'||m==='Script error') return true;
   var d=document.createElement('div');
   d.style.cssText='position:fixed;bottom:0;left:0;right:0;background:#B71C1C;color:#fff;padding:14px 16px;font-size:13px;z-index:99999;font-family:monospace;word-break:break-all';
   d.innerHTML='<strong>Erro JS linha '+l+':</strong> '+m;
@@ -1727,13 +1729,14 @@ async function renderDash(){
   const docItems=alDocs.slice(0,5).map(d=>{
     const filialTag=(filialAtiva==='todas'&&d.filial)?
       '<span style="font-size:10px;font-weight:700;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle">'+esc(d.filial)+'</span>':'';
+    const ls = d._liveStatus || d.status;
     return '<div class="tl-i">'+
-      '<div class="tl-d" style="background:'+(d.status==='x'?'var(--er)':'var(--wn)')+'"></div>'+
+      '<div class="tl-d" style="background:'+(ls==='x'?'var(--er)':'var(--wn)')+'"></div>'+
       '<div style="flex:1">'+
         '<div class="tl-t">'+esc(d.nome)+filialTag+'</div>'+
         '<div class="tl-m">'+esc(d.modulo)+' · Validade: '+fd(d.data_validade)+' · '+dHtml(d.data_validade)+'</div>'+
       '</div>'+
-      stB(d.status)+'</div>';
+      stB(ls)+'</div>';
   }).join('');
   const alertsHtml=(!alDocs.length&&!eficPend.length&&!(popsReview&&popsReview.length))
     ?'<div class="empty" style="padding:20px"><i class="ti ti-circle-check" style="color:var(--ok);font-size:30px;margin-bottom:8px"></i><div class="empty-t" style="font-size:12.5px">Nenhum alerta</div></div>'
