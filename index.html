@@ -545,6 +545,51 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================================
 // AUTH — LOGIN / LOGOUT
 // ============================================================
+async function forgotPassword(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const err = document.getElementById('loginErr');
+  if(!email){ err.textContent='Digite seu e-mail acima primeiro.'; err.style.display='block'; return; }
+  const btn = document.getElementById('btnForgot');
+  btn.textContent = 'Enviando...'; btn.disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.href
+  });
+  btn.textContent = 'Esqueci minha senha'; btn.disabled = false;
+  if(error){
+    err.textContent = 'Erro ao enviar. Verifique o e-mail digitado.';
+    err.style.display = 'block';
+  } else {
+    document.getElementById('resetMsg').style.display = 'block';
+    err.style.display = 'none';
+  }
+}
+
+
+async function showForgotPwd(){
+  const box = document.getElementById('loginForgotBox');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if(box.style.display === 'block'){
+    const emailVal = document.getElementById('loginEmail').value;
+    if(emailVal) document.getElementById('forgotEmail').value = emailVal;
+    document.getElementById('forgotEmail').focus();
+  }
+}
+
+async function sendResetEmail(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  const msg = document.getElementById('forgotMsg');
+  if(!email){ msg.style.display='block'; msg.style.color='var(--er)'; msg.textContent='Informe o e-mail.'; return; }
+  msg.style.display='block'; msg.style.color='var(--t2)'; msg.textContent='Enviando...';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if(error){
+    msg.style.color='var(--er)'; msg.textContent='Erro: '+error.message;
+  } else {
+    msg.style.color='var(--ok)'; msg.textContent='Link enviado! Verifique seu e-mail.';
+  }
+}
+
 async function checkAuth(){
   try {
     await sb.auth.signOut();
@@ -918,7 +963,7 @@ async function buildNotifs(){
     };
   });
 
-  const allNotifs = [...retAlerts, ...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
+  const allNotifs = [...retAlerts, ...audDynAlerts, ...popsAlerts, ...eficAlerts, ...eficWarn, ...notifs];
   const unread = allNotifs.filter(n=>!n.lida).length;
   const bdg = document.getElementById('bdg');
   bdg.textContent = unread; bdg.style.display = unread ? 'flex' : 'none';
@@ -1285,12 +1330,12 @@ async function renderTrein(tabObs){
   <div id="bulkBar" style="display:none" class="bulk-bar">
     <span class="bulk-info" id="bulkInfo">0 selecionados</span>
     <button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>
-    <button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'treinamentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>
+    <button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(this.dataset.btype)" data-btype="treinamentos"><i class="ti ti-archive"></i>Mover para Obsoletos</button>
   </div>
   ${!tr.length
     ? `<div class="empty"><i class="ti ti-school-off"></i><div class="empty-t">${tabObs?'Nenhum treinamento obsoleto':'Nenhum treinamento cadastrado'}</div>${!tabObs?'<button class="btn btn-l" style="margin-top:10px" id="btnNTrein2"><i class="ti ti-plus"></i>Adicionar</button>':''}</div>`
     : `<div class="tw"><table><thead><tr>
-        <th style="width:28px"><div class="chk-all" id="chkAllTrein" onclick="toggleAllChk(\'treinamentos\')"><i class="ti ti-check" style="font-size:11px"></i></div></th>
+        <th style="width:28px"><div class="chk-all" id="chkAllTrein" onclick="toggleAllChk(this.dataset.ttype)" data-ttype="treinamentos"><i class="ti ti-check" style="font-size:11px"></i></div></th>
         <th>Treinamento</th><th>Colaboradores</th><th>Responsável</th><th>Realização</th><th>Validade</th><th>Dias Rest.</th><th>Status</th><th>Eficácia</th><th>Ações</th>
       </tr></thead><tbody id="treinTB">${rows}</tbody></table></div>`
   }
@@ -1873,7 +1918,7 @@ async function renderDocs(){
       '<div id="bulkBar" style="display:none" class="bulk-bar">'+
         '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
         '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+        '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(this.dataset.btype)" data-btype="documentos"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
       '</div>'+
       (!D.length
         ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">'+
@@ -1882,7 +1927,7 @@ async function renderDocs(){
         '</div>'
         :'<div class="tw"><table>'+
           '<thead><tr>'+
-            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk(\'documentos\')"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
+            '<th style="width:28px"><div class="chk-all" id="chkAllDoc" onclick="toggleAllChk(this.dataset.ttype)" data-ttype="documentos"><i class="ti ti-check" style="font-size:11px"></i></div></th>'+
             '<th>Documento</th><th>Ver.</th><th>Responsável</th>'+
             '<th>Emissão</th><th>Validade</th><th>Dias Rest.</th>'+
             '<th>Status</th><th>Arquivos</th><th>Ações</th>'+
@@ -2058,7 +2103,7 @@ async function renderDocsDePasta(subNome){
         '<div id="bulkBar" style="display:none" class="bulk-bar">'+
           '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
           '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
-          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(\'documentos\')"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
+          '<button class="btn btn-s" style="background:var(--wn);color:#fff" onclick="bulkObsolete(this.dataset.btype)" data-btype="documentos"><i class="ti ti-archive"></i>Mover para Obsoletos</button>'+
         '</div>'+
         (!D.length
           ?'<div class="empty"><i class="ti ti-file-off"></i><div class="empty-t">Nenhum documento nesta pasta</div><button class="btn btn-l" style="margin-top:10px" id="btnNDoc2"><i class="ti ti-plus"></i>Adicionar</button></div>'
@@ -2496,11 +2541,23 @@ async function showHistory(docId){
     html='<div style="font-size:12px;color:var(--t3);margin-bottom:12px">Versão atual: <strong>v'+esc(curr?.versao||'—')+'</strong> — '+esc(curr?.nome||'')+'</div>';
     html+='<div style="border-left:2px solid var(--bd);padding-left:16px">';
     V.forEach((v,i)=>{
+      // Build diff vs next version (index i+1 is older)
+      const prev = V[i+1];
+      let diffHtml = '';
+      if(prev){
+        const diffs = [];
+        if(v.nome !== prev.nome) diffs.push('<span style="background:#FFF3CD;padding:1px 4px;border-radius:3px;font-size:10.5px">Nome: <s style="color:#999">'+esc(prev.nome||'')+'</s> → '+esc(v.nome||'')+'</span>');
+        if(v.versao !== prev.versao) diffs.push('<span style="background:#D4EDDA;padding:1px 4px;border-radius:3px;font-size:10.5px">Versão: '+esc(prev.versao)+' → '+esc(v.versao)+'</span>');
+        if(v.data_validade !== prev.data_validade) diffs.push('<span style="background:#D1ECF1;padding:1px 4px;border-radius:3px;font-size:10.5px">Validade: '+fd(prev.data_validade)+' → '+fd(v.data_validade)+'</span>');
+        if(v.responsavel !== prev.responsavel) diffs.push('<span style="background:#F8D7DA;padding:1px 4px;border-radius:3px;font-size:10.5px">Responsável: '+esc(prev.responsavel||'')+'→'+esc(v.responsavel||'')+'</span>');
+        if(diffs.length) diffHtml='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'+diffs.join('')+'</div>';
+      }
       html+=
         '<div style="position:relative;margin-bottom:16px">'+
         '<div style="position:absolute;left:-21px;top:4px;width:10px;height:10px;border-radius:50%;background:'+(i===0?'var(--l)':'var(--bd2)')+'"></div>'+
-        '<div style="font-weight:700;font-size:13px;color:var(--p)">v'+esc(v.versao)+'</div>'+
+        '<div style="font-weight:700;font-size:13px;color:var(--p)">v'+esc(v.versao)+(i===0?' <span style="font-size:10px;background:var(--pxl);color:var(--l);padding:1px 6px;border-radius:10px;font-weight:600">versão salva</span>':'')+'</div>'+
         '<div style="font-size:11.5px;color:var(--t2);margin-top:2px">'+esc(v.nome||'—')+'</div>'+
+        diffHtml+
         '<div style="font-size:11px;color:var(--t3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap">'+
           '<span><i class="ti ti-user" style="font-size:10px"></i> '+esc(v.alterado_por||'—')+'</span>'+
           '<span><i class="ti ti-calendar" style="font-size:10px"></i> '+fd(v.alterado_em?.split('T')[0])+'</span>'+
@@ -2538,6 +2595,21 @@ async function exportPDF(targetFilial){
 
   const stLabel={v:'Vigente',p:'Próximo ao Venc.',x:'Vencido'};
   const stColor={v:'#27AE60',p:'#F5A623',x:'#E53E3E'};
+
+
+  // Fetch treinamentos
+  let tQ = sb.from('treinamentos').select('*').eq('obsoleto',false).order('nome');
+  if(targetFilial!=='todas') tQ=tQ.eq('filial',targetFilial);
+  const {data:pdfTreins}=await tQ;
+  const pdfT=pdfTreins||[];
+
+  // Fetch auditorias
+  let aQ = sb.from('auditorias').select('*').order('data_auditoria',{ascending:false});
+  if(targetFilial!=='todas') aQ=aQ.eq('filial',targetFilial);
+  const {data:pdfAudits}=await aQ;
+  const A=pdfAudits||[];
+
+  const stLabelT={Inicial:'Inicial',Periódico:'Periódico',Reciclagem:'Reciclagem',Específico:'Específico'};
 
   let modHtml='';
   Object.entries(byMod).forEach(([mod,docs2])=>{
@@ -2587,6 +2659,44 @@ async function exportPDF(targetFilial){
     <div style="margin-top:30px;padding-top:12px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center">
       Relatório gerado pelo SGQ JC Farmacêutica em ${hoje} — Confidencial
     </div>
+    ${pdfT.length ? `
+    <h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Treinamentos (${pdfT.length})</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px">
+      <thead><tr style="background:#f5f5f5">
+        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Treinamento</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Realização</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Eficácia</th>
+      </tr></thead><tbody>
+      ${pdfT.map(t=>`<tr>
+        <td style="padding:5px 8px;border:1px solid #eee">${t.nome||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${t.tipo||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${t.filial||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${t.data_realizacao?t.data_realizacao.split('-').reverse().join('/'):'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:${t.avaliacao_eficacia==='Eficaz'?'#27AE60':t.avaliacao_eficacia?'#E53E3E':'#999'}">${t.avaliacao_eficacia||'Pendente'}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>` : ''}
+    ${pdfA.length ? `
+    <h2 style="color:#1B4F5E;margin:28px 0 10px;border-bottom:2px solid #1B4F5E;padding-bottom:6px">Auditorias (${pdfA.length})</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:20px">
+      <thead><tr style="background:#f5f5f5">
+        <th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Auditoria</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Tipo</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Filial</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Data</th>
+        <th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Resultado</th>
+      </tr></thead><tbody>
+      ${pdfA.map(a=>`<tr>
+        <td style="padding:5px 8px;border:1px solid #eee">${a.nome||a.tipo_auditoria||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${a.tipo_auditoria||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:#666">${a.filial||'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${a.data_auditoria?a.data_auditoria.split('-').reverse().join('/'):'—'}</td>
+        <td style="padding:5px 8px;border:1px solid #eee;text-align:center">${a.resultado||'—'}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>` : ''}
     <div class="no-print" style="margin-top:20px;text-align:center">
       <button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
     </div>
@@ -2594,8 +2704,46 @@ async function exportPDF(targetFilial){
   </body></html>`;
 
   hideLoading();
+  // Fetch treinamentos
+  let qT = sb.from('treinamentos').select('nome,tipo,responsavel,data_realizacao,avaliacao_eficacia,status').eq('obsoleto',false).order('nome');
+  if(targetFilial!=='todas') qT=qT.eq('filial',targetFilial);
+  const {data:treins}=await qT;
+  const pdfT2=treins||[];
+
+  // Fetch auditorias
+  let qA = sb.from('auditorias').select('tipo,data_auditoria,responsavel,status,proxima_auditoria').order('data_auditoria',{ascending:false});
+  if(targetFilial!=='todas') qA=qA.eq('filial',targetFilial);
+  const {data:auds}=await qA;
+  const AU=auds||[];
+
+  let treinHtml='';
+  if(pdfT.length){
+    treinHtml='<h2 style="color:#1B4F5E;margin:24px 0 8px">Treinamentos</h2>';
+    treinHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Treinamento</th><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Realização</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Eficácia</th></tr></thead><tbody>';
+    T.forEach(t=>{
+      const ef=t.avaliacao_eficacia||'Pendente';
+      const efColor=ef==='Eficaz'?'#27AE60':ef==='Ineficaz'?'#E53E3E':'#F5A623';
+      treinHtml+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+t.nome+'</td><td style="padding:5px 8px;border:1px solid #eee;color:#666">'+t.tipo+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(t.data_realizacao?t.data_realizacao.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center;color:'+efColor+';font-weight:700">'+ef+'</td></tr>';
+    });
+    treinHtml+='</tbody></table>';
+  }
+
+  let audHtml='';
+  if(AU.length){
+    audHtml='<h2 style="color:#1B4F5E;margin:24px 0 8px">Auditorias</h2>';
+    audHtml+='<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:#f5f5f5"><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Tipo</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Data</th><th style="padding:6px 8px;text-align:left;border:1px solid #ddd">Responsável</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Próxima</th><th style="padding:6px 8px;text-align:center;border:1px solid #ddd">Status</th></tr></thead><tbody>';
+    AU.forEach(a=>{
+      audHtml+='<tr><td style="padding:5px 8px;border:1px solid #eee">'+a.tipo+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(a.data_auditoria?a.data_auditoria.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee">'+a.responsavel+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+(a.proxima_auditoria?a.proxima_auditoria.split('-').reverse().join('/'):'—')+'</td><td style="padding:5px 8px;border:1px solid #eee;text-align:center">'+a.status+'</td></tr>';
+    });
+    audHtml+='</tbody></table>';
+  }
+
+  // Insert into html before closing
+  const htmlFinal = html.replace('</body>', treinHtml+audHtml+'</body>');
+
+  hideLoading();
   const w=window.open('','_blank');
-  w.document.write(html);
+  w.document.write(htmlFinal);
   w.document.close();
   setTimeout(()=>w.print(), 500);
 }
@@ -2773,6 +2921,53 @@ async function saveUsr(){
   renderUsuarios();
 }
 
+
+async function exportOp(){
+  showLoading('Gerando relatório...');
+  const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  let q = sb.from('registros_operacionais')
+    .select('*')
+    .eq('submodulo', curV)
+    .eq('ano', curOpAno)
+    .eq('mes', curOpMes)
+    .order('data_registro');
+  if(filialAtiva!=='todas') q=q.eq('filial',filialAtiva);
+  const {data:regs}=await q;
+  const R=regs||[];
+  const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const mesLabel=meses[(curOpMes||1)-1];
+
+  let rows='';
+  R.forEach(r=>{
+    rows+='<tr><td style="padding:6px 8px;border:1px solid #eee">'+(r.data_registro?r.data_registro.split('-').reverse().join('/'):'—')+'</td>'+
+      '<td style="padding:6px 8px;border:1px solid #eee">'+(r.responsavel||'—')+'</td>'+
+      '<td style="padding:6px 8px;border:1px solid #eee">'+(r.observacoes||'—')+'</td>'+
+      '<td style="padding:6px 8px;border:1px solid #eee;text-align:center">'+(r.filial||'—')+'</td></tr>';
+  });
+
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Operacional</title>'+
+    '<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}table{width:100%;border-collapse:collapse}@media print{.np{display:none}}</style></head><body>'+
+    '<div style="border-bottom:2px solid #1B4F5E;padding-bottom:12px;margin-bottom:20px">'+
+      '<h1 style="color:#1B4F5E;margin:0">'+esc(CFG.empresa)+'</h1>'+
+      '<div style="color:#666;font-size:12px">'+esc(SMAP[curV]||curV)+' · '+esc(String(curOpAno))+' · '+mesLabel+(filialAtiva!=='todas'?' · '+esc(filialAtiva):'')+'</div>'+
+    '</div>'+
+    '<table><thead><tr style="background:#f5f5f5">'+
+      '<th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Data</th>'+
+      '<th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Responsável</th>'+
+      '<th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Observações</th>'+
+      '<th style="padding:6px 8px;border:1px solid #ddd;text-align:center">Filial</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table>'+
+    (!rows?'<p style="color:#999;text-align:center;margin-top:40px">Nenhum registro encontrado</p>':'')+
+    '<div class="np" style="margin-top:20px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Imprimir / Salvar PDF</button></div>'+
+    '</body></html>';
+
+  hideLoading();
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+}
+
 // ============================================================
 // EVENT DELEGATION
 // ============================================================
@@ -2793,6 +2988,7 @@ document.getElementById('cnt').addEventListener('click', e => {
   const opMesCard=t.closest('[data-opmes]');
   if(opMesCard){ curOpMes=parseInt(opMesCard.dataset.opmes); render(); return; }
   // Operacional: new registro
+  if(t.closest('#btnExportOp')){ exportOp(); return; }
   if(t.closest('#btnNReg')||t.closest('#btnNReg2')){ newReg(); return; }
   // Operacional: edit registro
   const editReg2=t.closest('[data-editreg]');
