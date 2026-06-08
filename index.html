@@ -1275,6 +1275,7 @@ async function doSearch(val){
     '</div>';
 }
 async function renderTrein(tabObs){
+  try {
   if(tabObs===undefined) tabObs = window._treinObsTab||false;
   window._treinObsTab = tabObs;
   let qA = sb.from('treinamentos').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
@@ -1360,8 +1361,12 @@ async function renderTrein(tabObs){
       </tr></thead><tbody id="treinTB">${rows}</tbody></table></div>`
   }
 </div>`;
+  } catch(e){
+    console.error("renderTrein error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
 function newTrein(){
   document.getElementById('tId').value='';
   document.getElementById('mTreinTit').innerHTML='<i class="ti ti-school" style="color:var(--l)"></i>Novo Treinamento';
@@ -1435,6 +1440,7 @@ async function delTrein(id){ showLoading('Excluindo...'); await sb.from('treinam
 // AUDITORIAS
 // ============================================================
 async function renderAudit(){
+  try {
   const obsTab = window._audObsTab||false;
   let qA = sb.from('auditorias').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
   let qO = sb.from('auditorias').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
@@ -1483,8 +1489,12 @@ async function renderAudit(){
   ${!aud.length?`<div class="empty"><i class="ti ti-clipboard-off"></i><div class="empty-t">${obsTab?'Nenhuma auditoria obsoleta':'Nenhuma auditoria'}</div>${!obsTab?'<button class="btn btn-l" style="margin-top:10px" id="btnNAud2"><i class="ti ti-plus"></i>Adicionar</button>':''}</div>`:`<div class="tw"><table><thead><tr><th style="width:28px"><div class="chk-all" onclick="toggleAllChk('auditorias')"><i class="ti ti-check" style="font-size:11px"></i></div></th><th>Tipo</th><th>Data</th><th>Auditor</th><th>Não Conformidades</th><th>Risco</th><th>Responsável</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>`}
 </div>
 ${!obsTab?`<div class="card"><div class="st-title"><i class="ti ti-alert-circle" style="color:var(--er)"></i>Não Conformidades Abertas</div>${ncAbertos.length?ncAbertos.map(a=>`<div class="al w"><i class="ti ti-clock"></i><div><strong>${esc(a.tipo)} — ${fd(a.data)}</strong><br><span style="font-size:12px">${esc(a.nao_conformidades)} · Risco: ${esc(a.risco)} · Prazo: ${fd(a.prazo)}</span></div></div>`).join(''):'<div style="color:var(--t3);font-size:12.5px;padding:8px 0">Nenhuma NC aberta.</div>'}</div>`:''}`;
+  } catch(e){
+    console.error("renderAudit error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
 function newAudit(){
   document.getElementById('aId').value='';
   document.getElementById('mAudTit').innerHTML='<i class="ti ti-clipboard-check" style="color:var(--l)"></i>Registrar Auditoria';
@@ -1853,6 +1863,7 @@ async function switchDashFilial(nome){
 }
 
 async function renderDocs(){
+  try {
   const v=curV; const lbl=MMAP[v]||v;
   const obsTab=window._docsObsTab||false;
   let query=sb.from('documentos').select('*').eq('obsoleto',obsTab).order('criado_em',{ascending:false});
@@ -1973,8 +1984,12 @@ async function renderDocs(){
         '<div style="font-size:11.5px;margin-top:4px">Associe o arquivo ao salvar o documento</div>'+
       '</div>'+
     '</div>';
+  } catch(e){
+    console.error("renderDocs error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
 async function renderQualif(){
   const v=curV;
   const subNome=SMAP[v]||MMAP[v]||v;
@@ -2009,6 +2024,11 @@ async function renderPastaGrid(v, subNome){
   const pastaEmpty=isPops?'Crie uma pasta para cada POP (ex: POP 001 — Recebimento)':'Crie uma pasta para cada empresa, cliente ou fornecedor';
   const folderIco=isPops?'ti-file-description':'ti-folder';
   const cardClass=isPops?'pasta-card pop-card':'pasta-card';
+  const {data:P} = await pQuery;
+  // Build counts per pasta
+  const {data:docCounts}=await sb.from('documentos').select('pasta_id').eq('obsoleto',false);
+  const counts={};
+  (docCounts||[]).forEach(d=>{ if(d.pasta_id) counts[d.pasta_id]=(counts[d.pasta_id]||0)+1; });
   // Build cards grouped by filial when viewing all
   let cardsHtml='';
   if(filialAtiva==='todas'){
@@ -2208,6 +2228,7 @@ function opSubAvail(subId){
 }
 
 async function renderOperacional(){
+  try {
   const subId=curV;
   const subNome=OP_SUB_MAP[subId]||subId;
 
@@ -2233,8 +2254,12 @@ async function renderOperacional(){
   } else {
     await renderOpRegistros(subId, subNome);
   }
+  } catch(e){
+    console.error("renderOperacional error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
 async function renderOpAnos(subId, subNome){
   // Get distinct years with record counts
   let query=sb.from('registros_operacionais').select('ano').eq('submodulo',subNome).eq('obsoleto',false);
@@ -2738,6 +2763,7 @@ function inlineDateEdit(docId, currentVal, cell){
 
 
 async function renderLog(){
+  try {
   const {data:{session:sess2}} = await sb.auth.getSession();
   const email2 = sess2?.user?.email||'';
   if(!ADMIN_EMAILS.includes(email2)){
@@ -2792,8 +2818,12 @@ async function renderLog(){
           '<tbody>'+rows+'</tbody>'+
         '</table></div>')+
     '</div>';
+  } catch(e){
+    console.error("renderLog error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
 async function clearLog(){
   confirm2('Limpar todo o log de atividades?', async()=>{
     showLoading('Limpando...');
@@ -2806,6 +2836,7 @@ async function clearLog(){
 const ADMIN_EMAILS=['anna@jcfarmaceutica.com.br','responsaveltecnico@tendtudofarma.com.br'];
 
 async function renderUsuarios(){
+  try {
   // Check if current user is an admin
   const {data:{session}} = await sb.auth.getSession();
   const currentEmail = session?.user?.email||'';
@@ -2849,9 +2880,12 @@ async function renderUsuarios(){
           '<tbody id="usrTB">'+rows+'</tbody>'+
         '</table></div>')+
     '</div>';
+  } catch(e){
+    console.error("renderUsuarios error:", e);
+    const _c=document.getElementById('cnt');
+    if(_c) _c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
 }
-
-
 async function editUsr(cfgId){
   const {data:u}=await sb.from('configuracoes').select('*').eq('id',cfgId).single();
   if(!u) return;
