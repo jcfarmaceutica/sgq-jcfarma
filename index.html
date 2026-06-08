@@ -1379,7 +1379,20 @@ function newTrein(){
   if(document.getElementById('tFInput')) document.getElementById('tFInput').value='';
   if(document.getElementById('tFPreview')) document.getElementById('tFPreview').innerHTML='';
   pendingTreinFile=null;
+  const fgTF = document.getElementById('fgTFilial');
+  if(fgTF){
+    fgTF.style.display = isMatriz ? 'block' : 'none';
+    if(isMatriz){
+      const sel = document.getElementById('tFilial');
+      if(sel){ sel.innerHTML = FILIAIS.map(f=>'<option value="'+f.nome+'">'+f.nome+'</option>').join(''); }
+    }
+  }
   openModal('mTrein');
+  { const _fgTF = document.getElementById('fgTFilial');
+    if(_fgTF){ _fgTF.style.display = isMatriz ? 'block' : 'none';
+      if(isMatriz){ const _selTF = document.getElementById('tFilial');
+        if(_selTF) _selTF.innerHTML = FILIAIS.map(f=>'<option value="'+f.nome+'">'+f.nome+'</option>').join(''); }
+    } }
 }
 
 async function editTrein(id){
@@ -1401,6 +1414,14 @@ async function editTrein(id){
   if(document.getElementById('tFInput')) document.getElementById('tFInput').value='';
   if(document.getElementById('tFPreview')) document.getElementById('tFPreview').innerHTML='';
   pendingTreinFile=null;
+  const fgTF = document.getElementById('fgTFilial');
+  if(fgTF){
+    fgTF.style.display = isMatriz ? 'block' : 'none';
+    if(isMatriz){
+      const sel = document.getElementById('tFilial');
+      if(sel){ sel.innerHTML = FILIAIS.map(f=>'<option value="'+f.nome+'">'+f.nome+'</option>').join(''); }
+    }
+  }
   openModal('mTrein');
 }
 
@@ -1422,7 +1443,7 @@ async function saveTrein(){
     avaliacao_eficacia:document.getElementById('tAvalia')?document.getElementById('tAvalia').value==='1':false,
     resultado_eficacia:document.getElementById('tResult')?document.getElementById('tResult').value:'',
     avaliacao_obs:document.getElementById('tAvaliaObs')?document.getElementById('tAvaliaObs').value:'',
-    filial:filialAtiva==='todas'?'Matriz':filialAtiva
+    filial:filialAtiva==='todas'?(document.getElementById('tFilial')?.value||FILIAIS[0]?.nome||'GO'):filialAtiva
   };
   showLoading('Salvando...');
   let treinId=id;
@@ -1501,6 +1522,11 @@ function newAudit(){
   ['aAud','aNc','aResp','aObs'].forEach(id=>{ document.getElementById(id).value=''; });
   document.getElementById('aData').value=''; document.getElementById('aPrazo').value='';
   document.getElementById('aTipo').value='Interna'; document.getElementById('aRisco').value='Menor'; document.getElementById('aStat').value='em_andamento';
+  { const _fgAF = document.getElementById('fgAFilial');
+    if(_fgAF){ _fgAF.style.display = isMatriz ? 'block' : 'none';
+      if(isMatriz){ const _selA = document.getElementById('aFilial');
+        if(_selA) _selA.innerHTML = FILIAIS.map(f=>'<option value="'+f.nome+'">'+f.nome+'</option>').join(''); }
+    } }
   openModal('mAud');
 }
 
@@ -1517,7 +1543,7 @@ async function editAudit(id){
 
 async function saveAudit(){
   const id=document.getElementById('aId').value;
-  const p={ tipo:document.getElementById('aTipo').value, data:document.getElementById('aData').value||null, auditor:document.getElementById('aAud').value, nao_conformidades:document.getElementById('aNc').value||'Nenhuma', risco:document.getElementById('aRisco').value, responsavel:document.getElementById('aResp').value||'Não informado', prazo:document.getElementById('aPrazo').value||null, status:document.getElementById('aStat').value, observacoes:document.getElementById('aObs').value, filial:filialAtiva==='todas'?'Matriz':filialAtiva };
+  const p={ tipo:document.getElementById('aTipo').value, data:document.getElementById('aData').value||null, auditor:document.getElementById('aAud').value, nao_conformidades:document.getElementById('aNc').value||'Nenhuma', risco:document.getElementById('aRisco').value, responsavel:document.getElementById('aResp').value||'Não informado', prazo:document.getElementById('aPrazo').value||null, status:document.getElementById('aStat').value, observacoes:document.getElementById('aObs').value, filial:filialAtiva==='todas'?(document.getElementById('tFilial')?.value||FILIAIS[0]?.nome||'GO'):filialAtiva };
   showLoading('Salvando...');
   if(id){ await sb.from('auditorias').update(p).eq('id',id); toast('Atualizado!','s'); }
   else { await sb.from('auditorias').insert(p); toast('Registrado!','s'); }
@@ -1568,7 +1594,7 @@ async function editForn(id){
 async function saveForn(){
   const nome=document.getElementById('fNome').value.trim(); if(!nome){ toast('Informe o nome','d'); return; }
   const id=document.getElementById('fId').value;
-  const p={ nome, cnpj:document.getElementById('fCnpj').value, score:parseInt(document.getElementById('fScore').value)||0, tipo:document.getElementById('fTipo').value, afe:document.getElementById('fAfe').value, status:document.getElementById('fStat').value, ultima_avaliacao:document.getElementById('fUlt').value, proxima_avaliacao:document.getElementById('fProx').value, observacoes:document.getElementById('fObs').value, filial:filialAtiva==='todas'?'Matriz':filialAtiva };
+  const p={ nome, cnpj:document.getElementById('fCnpj').value, score:parseInt(document.getElementById('fScore').value)||0, tipo:document.getElementById('fTipo').value, afe:document.getElementById('fAfe').value, status:document.getElementById('fStat').value, ultima_avaliacao:document.getElementById('fUlt').value, proxima_avaliacao:document.getElementById('fProx').value, observacoes:document.getElementById('fObs').value, filial:filialAtiva==='todas'?(document.getElementById('tFilial')?.value||FILIAIS[0]?.nome||'GO'):filialAtiva };
   showLoading('Salvando...');
   if(id){ await sb.from('fornecedores').update(p).eq('id',id); toast('Atualizado!','s'); }
   else { await sb.from('fornecedores').insert(p); toast('Cadastrado!','s'); }
