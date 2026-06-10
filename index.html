@@ -2741,8 +2741,7 @@ async function exportPDF(targetFilial){
 
     // Assemble full HTML
     let html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório SGQ — '+CFG.empresa+'</title>';
-    html+='<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}@media print{.no-print{display:none}}<\/style>
-<\/head><body>';
+    html+='<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}@media print{.no-print{display:none}}</style></head><body>';
     html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:2px solid #1B4F5E;padding-bottom:12px">';
     html+='<div><h1 style="margin:0;color:#1B4F5E">'+esc(CFG.empresa)+'</h1><div style="color:#666;font-size:12px">'+esc(CFG.subtitulo)+' · Relatório de Conformidade</div></div>';
     html+='<div style="text-align:right;font-size:11px;color:#666"><div>Data: '+hoje+'</div><div>Filial: '+esc(filialLabel)+'</div><div>Gerado por: '+esc(CFG.user_nome||'—')+'</div></div></div>';
@@ -2975,10 +2974,7 @@ async function exportOp(){
       '<td style="padding:6px 8px;border:1px solid #eee">'+(r.observacoes||'—')+'</td>'+
       '<td style="padding:6px 8px;border:1px solid #eee;text-align:center">'+(r.filial||'—')+'</td></tr>';
   });
-
-  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Operacional</title>'+
-    '<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}table{width:100%;border-collapse:collapse}@media print{.np{display:none}}</style>
-</head><body>'+
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Operacional</title>'+    '<style>body{font-family:Arial,sans-serif;margin:30px;color:#222}table{width:100%;border-collapse:collapse}@media print{.np{display:none}}</style></head><body>'+
     '<div style="border-bottom:2px solid #1B4F5E;padding-bottom:12px;margin-bottom:20px">'+
       '<h1 style="color:#1B4F5E;margin:0">'+esc(CFG.empresa)+'</h1>'+
       '<div style="color:#666;font-size:12px">'+esc(SMAP[curV]||curV)+' · '+esc(String(curOpAno))+' · '+mesLabel+(filialAtiva!=='todas'?' · '+esc(filialAtiva):'')+'</div>'+
