@@ -35,7 +35,7 @@ html,body{height:100%;font-family:'Nunito Sans',sans-serif;font-size:13px;color:
 /* SIDEBAR */
 #sb{width:var(--sw);background:var(--p);display:flex;flex-direction:column;flex-shrink:0;transition:width .25s;overflow:hidden;z-index:10}
 /* width handled below */
-.sb-logo{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;cursor:pointer;flex-shrink:0;overflow:hidden}
+.sb-logo{padding:14px 12px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .logo-ico{width:34px;height:34px;background:var(--l);border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:var(--pd);flex-shrink:0;font-family:'Nunito',sans-serif}
 .logo-txt{overflow:hidden;white-space:nowrap}
 .logo-name{font-size:14px;font-weight:800;color:#fff;line-height:1.2;font-family:'Nunito',sans-serif}
@@ -368,7 +368,7 @@ tr.selected td{background:#EBF4F7 !important}
 <div id="app" style="display:none">
 <nav id="sb">
   <div class="sb-logo" onclick="toggleSB()">
-    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="filter:brightness(0) invert(1);height:38px;width:auto;max-width:170px;object-fit:contain;filter:brightness(0) invert(1);opacity:.95" /><span style="display:none" id="logoIco">JC</span><span style="display:none" id="logoName">JC Farmacêutica</span><span style="display:none" id="logoSub">SGQ</span>
+    <div style="background:#fff;border-radius:10px;padding:7px 12px;display:inline-flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15)"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="height:30px;width:auto;max-width:155px;object-fit:contain" /></div><span style="display:none" id="logoIco">JC</span><span style="display:none" id="logoName">JC Farmacêutica</span><span style="display:none" id="logoSub">SGQ</span>
   </div>
   <div class="sb-sc" id="sbNav"></div>
   <div class="sb-ft">
