@@ -17,9 +17,23 @@
   --bg:#F2F5F7;--sur:#fff;
   --t:#1A2B35;--t2:#4A6470;--t3:#8FA8B2;
   --bd:rgba(27,79,94,.11);--bd2:rgba(27,79,94,.22);
-  --ok:#27AE60;--wn:#F5A623;--er:#E53E3E;
+  --ok:#27AE60;--wn:#F5A623;--er:#E53E3E;--in:#3B82C4;
+  --erl:#FDEAEA;--wnl:#FEF6E7;--inl:#E8F1FA;
   --r:10px;--sw:228px;--sh:0 1px 4px rgba(0,0,0,.08);
 }
+.pend-list{display:flex;flex-direction:column;gap:2px}
+.pend-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;transition:background .15s}
+.pend-item:hover{background:var(--bg)}
+.pend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-dh{text-align:center;font-size:10.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.4px;padding:6px 0}
+.cal-cell{aspect-ratio:1;border-radius:8px;border:1px solid var(--bd);padding:5px;position:relative;display:flex;flex-direction:column;min-height:48px}
+.cal-empty{border:none}
+.cal-num{font-size:12px;color:var(--t2);font-weight:600}
+.cal-today{border:2px solid var(--p);background:var(--pxl)}
+.cal-has{cursor:pointer}
+.cal-has:hover{background:var(--bg)}
+.cal-badge{position:absolute;bottom:5px;right:5px;min-width:18px;height:18px;border-radius:9px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
 html,body{height:100%;font-family:'Nunito Sans',sans-serif;font-size:13px;color:var(--t);background:var(--bg)}
 #app{display:flex;height:100vh;overflow:hidden}
 
@@ -815,6 +829,8 @@ const NAV=[
   ]},
   {sep:true,lbl:'Gestão'},
   {id:'mestra',ico:'ti-list-check',lbl:'Lista Mestra'},
+  {id:'pendencias',ico:'ti-user-exclamation',lbl:'Pendências'},
+  {id:'calendario',ico:'ti-calendar-event',lbl:'Calendário'},
   {id:'trein',ico:'ti-school',lbl:'Treinamentos'},
   {id:'audit',ico:'ti-clipboard-check',lbl:'Auditorias'},
   {sep:true,lbl:'Sistema'},
@@ -1689,6 +1705,8 @@ async function render(){
     if(curV==='trein'){ await renderTrein(); return; }
     if(curV==='audit'){ await renderAudit(); return; }
     if(curV==='mestra'){ await renderListaMestra(); return; }
+    if(curV==='pendencias'){ await renderPendencias(); return; }
+    if(curV==='calendario'){ await renderCalendario(); return; }
     if(PASTA_VIEWS.includes(curV)){ await renderQualif(); return; }
     if(OP_VIEWS.includes(curV)){ await renderOperacional(); return; }
     await renderDocs();
@@ -3252,6 +3270,265 @@ async function exportListaMestra(){
     toast('Erro ao gerar Lista Mestra: '+e.message,'d');
     console.error('exportListaMestra:', e);
   }
+}
+
+// ============================================================
+// PENDÊNCIAS POR RESPONSÁVEL
+// ============================================================
+async function renderPendencias(){
+  const c = document.getElementById('cnt');
+  try {
+    // Fetch docs (vencidos + próximos)
+    let docQ = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') docQ = docQ.eq('filial', filialAtiva);
+    const { data: docs } = await docQ;
+    const D = docs || [];
+    D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
+
+    // Fetch treinamentos pending eficacia
+    let trQ = sb.from('treinamentos').select('nome,responsavel,filial,data_realizacao,avaliacao_eficacia,obsoleto').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') trQ = trQ.eq('filial', filialAtiva);
+    const { data: treins } = await trQ;
+    const T = treins || [];
+
+    // Group pendencias by responsavel
+    const byResp = {};
+    function ensure(resp){ const r = resp || 'Não atribuído'; if(!byResp[r]) byResp[r] = { vencidos:[], proximos:[], treinPend:[] }; return byResp[r]; }
+
+    D.forEach(d=>{
+      if(d._ls === 'x') ensure(d.responsavel).vencidos.push(d);
+      else if(d._ls === 'p') ensure(d.responsavel).proximos.push(d);
+    });
+    T.forEach(t=>{
+      if(!t.avaliacao_eficacia || t.avaliacao_eficacia === '') ensure(t.responsavel).treinPend.push(t);
+    });
+
+    const resps = Object.keys(byResp).sort((a,b)=>{
+      const ai = byResp[a].vencidos.length, bi = byResp[b].vencidos.length;
+      if(ai !== bi) return bi - ai; // more vencidos first
+      return a.localeCompare(b);
+    });
+
+    const totalVenc = D.filter(d=>d._ls==='x').length;
+    const totalProx = D.filter(d=>d._ls==='p').length;
+    const totalTrein = T.filter(t=>!t.avaliacao_eficacia).length;
+
+    let cards = '';
+    if(resps.length === 0){
+      cards = '<div class="card"><div class="empty"><i class="ti ti-circle-check" style="color:var(--ok);font-size:32px"></i><div class="empty-t">Nenhuma pendência!</div><p style="font-size:12.5px;color:var(--t3)">Todos os documentos estão em dia.</p></div></div>';
+    } else {
+      resps.forEach(resp=>{
+        const p = byResp[resp];
+        const totalP = p.vencidos.length + p.proximos.length + p.treinPend.length;
+        if(totalP === 0) return;
+        let items = '';
+        p.vencidos.forEach(d=>{
+          const dias = Math.abs(dLeft(d.data_validade));
+          items += '<div class="pend-item" data-snavid="'+esc(modToNavId(d.modulo,d.submodulo))+'" style="cursor:pointer">'+
+            '<span class="pend-dot" style="background:var(--er)"></span>'+
+            '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">'+esc(d.nome)+'</div>'+
+            '<div style="font-size:11px;color:var(--t3)">'+esc(d.modulo||'')+(filialAtiva==='todas'?' · '+esc(d.filial||''):'')+'</div></div>'+
+            '<span style="font-size:11px;color:var(--er);font-weight:700;white-space:nowrap">'+dias+'d vencido</span></div>';
+        });
+        p.proximos.forEach(d=>{
+          const dias = dLeft(d.data_validade);
+          items += '<div class="pend-item" data-snavid="'+esc(modToNavId(d.modulo,d.submodulo))+'" style="cursor:pointer">'+
+            '<span class="pend-dot" style="background:var(--wn)"></span>'+
+            '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">'+esc(d.nome)+'</div>'+
+            '<div style="font-size:11px;color:var(--t3)">'+esc(d.modulo||'')+(filialAtiva==='todas'?' · '+esc(d.filial||''):'')+'</div></div>'+
+            '<span style="font-size:11px;color:var(--wn);font-weight:700;white-space:nowrap">'+dias+'d restantes</span></div>';
+        });
+        p.treinPend.forEach(t=>{
+          items += '<div class="pend-item" style="cursor:default">'+
+            '<span class="pend-dot" style="background:var(--in)"></span>'+
+            '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">'+esc(t.nome)+'</div>'+
+            '<div style="font-size:11px;color:var(--t3)">Treinamento · avaliação de eficácia pendente</div></div>'+
+            '<span style="font-size:11px;color:var(--in);font-weight:700;white-space:nowrap">Pendente</span></div>';
+        });
+        const inits = (resp.split(' ').map(w=>w[0]).join('').substring(0,2) || '?').toUpperCase();
+        cards += '<div class="card" style="margin-bottom:14px">'+
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--bd)">'+
+            '<div style="width:38px;height:38px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">'+esc(inits)+'</div>'+
+            '<div style="flex:1"><div style="font-weight:700;font-size:14px">'+esc(resp)+'</div>'+
+            '<div style="font-size:11.5px;color:var(--t3)">'+totalP+' pendência(s)</div></div>'+
+            '<div style="display:flex;gap:6px">'+
+              (p.vencidos.length?'<span style="font-size:11px;font-weight:700;background:var(--erl);color:var(--er);padding:3px 9px;border-radius:20px">'+p.vencidos.length+' vencido(s)</span>':'')+
+              (p.proximos.length?'<span style="font-size:11px;font-weight:700;background:var(--wnl);color:var(--wn);padding:3px 9px;border-radius:20px">'+p.proximos.length+' próximo(s)</span>':'')+
+              (p.treinPend.length?'<span style="font-size:11px;font-weight:700;background:var(--inl);color:var(--in);padding:3px 9px;border-radius:20px">'+p.treinPend.length+' trein.</span>':'')+
+            '</div>'+
+          '</div>'+
+          '<div class="pend-list">'+items+'</div>'+
+        '</div>';
+      });
+    }
+
+    const filialLabel = filialAtiva==='todas' ? 'Todas as Filiais' : filialAtiva;
+    c.innerHTML =
+      '<div class="ph">'+
+        '<div class="ph-l"><div class="ph-bar"></div><div>'+
+          '<div class="pt">Central de Pendências</div>'+
+          '<div class="ps">'+esc(filialLabel)+' · por responsável</div>'+
+        '</div></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--er)"><div style="font-size:26px;font-weight:800;color:var(--er)">'+totalVenc+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Docs Vencidos</div></div>'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--wn)"><div style="font-size:26px;font-weight:800;color:var(--wn)">'+totalProx+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Próximos Venc.</div></div>'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--in)"><div style="font-size:26px;font-weight:800;color:var(--in)">'+totalTrein+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Trein. Pendentes</div></div>'+
+      '</div>'+
+      cards;
+
+    // Wire click navigation
+    c.querySelectorAll('.pend-item[data-snavid]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const navId = el.getAttribute('data-snavid');
+        if(navId && navId !== 'null'){ goToModule(navId); }
+      });
+    });
+  } catch(e){
+    console.error('renderPendencias error:', e);
+    c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar Pendências</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
+}
+
+// Map modulo/submodulo to a nav id for navigation
+function modToNavId(modulo, submodulo){
+  for(const k in SMAP){ if(SMAP[k] === submodulo) return k; }
+  for(const k in MMOD){ if(MMOD[k] === modulo) return k; }
+  return null;
+}
+function goToModule(navId){
+  const item = NAV.find(n=>n.id===navId);
+  if(item){ navigate(navId,null,item.lbl); return; }
+  // Check submodules
+  for(const n of NAV){
+    if(n.sub){ const s = n.sub.find(x=>x.id===navId); if(s){ openNav[n.id]=true; navigate(navId,n.lbl,s.lbl); return; } }
+  }
+}
+
+// ============================================================
+// CALENDÁRIO DE VENCIMENTOS
+// ============================================================
+let _calMonth = new Date().getMonth();
+let _calYear = new Date().getFullYear();
+
+async function renderCalendario(){
+  const c = document.getElementById('cnt');
+  try {
+    let docQ = sb.from('documentos').select('nome,modulo,submodulo,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).not('data_validade','is',null).eq('val_indeterminada',false);
+    if(filialAtiva !== 'todas') docQ = docQ.eq('filial', filialAtiva);
+    const { data: docs } = await docQ;
+    const D = docs || [];
+
+    // Build map: 'YYYY-MM-DD' -> [docs]
+    const byDate = {};
+    D.forEach(d=>{
+      const key = (d.data_validade||'').substring(0,10);
+      if(!key) return;
+      if(!byDate[key]) byDate[key] = [];
+      byDate[key].push(d);
+    });
+
+    const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const dayNames = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    const firstDay = new Date(_calYear, _calMonth, 1);
+    const lastDay = new Date(_calYear, _calMonth + 1, 0);
+    const startWeekday = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    // Build calendar grid
+    let cells = '';
+    // Day headers
+    dayNames.forEach(dn=>{ cells += '<div class="cal-dh">'+dn+'</div>'; });
+    // Empty cells before first day
+    for(let i=0;i<startWeekday;i++){ cells += '<div class="cal-cell cal-empty"></div>'; }
+    // Day cells
+    for(let day=1;day<=daysInMonth;day++){
+      const dateKey = _calYear+'-'+String(_calMonth+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      const dayDate = new Date(_calYear, _calMonth, day);
+      const dayDocs = byDate[dateKey] || [];
+      const isToday = dayDate.getTime() === today.getTime();
+      const isPast = dayDate < today;
+
+      let badges = '';
+      if(dayDocs.length > 0){
+        const expired = dayDocs.filter(()=>isPast || isToday);
+        const color = isPast ? 'var(--er)' : (dayDate - today)/86400000 <= 30 ? 'var(--wn)' : 'var(--ok)';
+        badges = '<div class="cal-badge" style="background:'+color+'">'+dayDocs.length+'</div>';
+      }
+
+      const docTitles = dayDocs.map(d=>esc(d.nome)+(filialAtiva==='todas'?' ('+esc(d.filial||'')+')':'')).join('\n');
+      cells += '<div class="cal-cell'+(isToday?' cal-today':'')+(dayDocs.length?' cal-has':'')+'"'+
+        (dayDocs.length?' data-caldate="'+dateKey+'" title="'+docTitles.replace(/"/g,'&quot;')+'"':'')+'>'+
+        '<div class="cal-num">'+day+'</div>'+badges+'</div>';
+    }
+
+    // List of this month's expirations
+    const monthDocs = D.filter(d=>{
+      const dt = d.data_validade.substring(0,7);
+      return dt === _calYear+'-'+String(_calMonth+1).padStart(2,'0');
+    }).sort((a,b)=>a.data_validade.localeCompare(b.data_validade));
+
+    let listHtml = '';
+    if(monthDocs.length === 0){
+      listHtml = '<div style="text-align:center;padding:20px;color:var(--t3);font-size:12.5px">Nenhum vencimento neste mês.</div>';
+    } else {
+      monthDocs.forEach(d=>{
+        const dia = parseInt(d.data_validade.substring(8,10));
+        const ls = calcStat(d.data_validade);
+        const color = ls==='x'?'var(--er)':ls==='p'?'var(--wn)':'var(--ok)';
+        listHtml += '<div class="pend-item" data-snavid="'+esc(modToNavId(d.modulo,d.submodulo))+'" style="cursor:pointer">'+
+          '<div style="width:34px;height:34px;border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:'+color+'">'+dia+'</div>'+
+          '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">'+esc(d.nome)+'</div>'+
+          '<div style="font-size:11px;color:var(--t3)">'+esc(d.modulo||'')+(filialAtiva==='todas'?' · '+esc(d.filial||''):'')+'</div></div>'+
+          '<span style="font-size:11px;font-weight:700;color:'+color+'">'+stB(ls).replace(/<[^>]+>/g,'').trim()+'</span></div>';
+      });
+    }
+
+    const filialLabel = filialAtiva==='todas' ? 'Todas as Filiais' : filialAtiva;
+    c.innerHTML =
+      '<div class="ph">'+
+        '<div class="ph-l"><div class="ph-bar"></div><div>'+
+          '<div class="pt">Calendário de Vencimentos</div>'+
+          '<div class="ps">'+esc(filialLabel)+'</div>'+
+        '</div></div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'+
+          '<button class="btn btn-o" onclick="calNav(-1)"><i class="ti ti-chevron-left"></i></button>'+
+          '<div style="font-weight:700;font-size:16px;color:var(--p)">'+monthNames[_calMonth]+' '+_calYear+'</div>'+
+          '<button class="btn btn-o" onclick="calNav(1)"><i class="ti ti-chevron-right"></i></button>'+
+        '</div>'+
+        '<div class="cal-grid">'+cells+'</div>'+
+        '<div style="display:flex;gap:16px;margin-top:14px;font-size:11px;color:var(--t3);justify-content:center">'+
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--er);margin-right:4px"></span>Vencido</span>'+
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--wn);margin-right:4px"></span>Próximo (30d)</span>'+
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:4px"></span>Futuro</span>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card" style="margin-top:14px">'+
+        '<div style="font-weight:700;font-size:13.5px;color:var(--p);margin-bottom:10px"><i class="ti ti-list"></i> Vencimentos de '+monthNames[_calMonth]+' ('+monthDocs.length+')</div>'+
+        '<div class="pend-list">'+listHtml+'</div>'+
+      '</div>';
+
+    c.querySelectorAll('.pend-item[data-snavid]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        const navId = el.getAttribute('data-snavid');
+        if(navId && navId !== 'null'){ goToModule(navId); }
+      });
+    });
+  } catch(e){
+    console.error('renderCalendario error:', e);
+    c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar Calendário</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
+}
+
+function calNav(delta){
+  _calMonth += delta;
+  if(_calMonth < 0){ _calMonth = 11; _calYear--; }
+  else if(_calMonth > 11){ _calMonth = 0; _calYear++; }
+  renderCalendario();
 }
 
 // ============================================================
