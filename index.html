@@ -541,7 +541,7 @@ tr.selected td{background:#EBF4F7 !important}
 
 <div class="mo" id="mConf">
   <div class="md sm">
-    <div class="mh"><div class="mt" style="color:var(--er)"><i class="ti ti-alert-triangle"></i>Confirmar Exclusão</div><div class="bic" onclick="closeModal('mConf')"><i class="ti ti-x"></i></div></div>
+    <div class="mh"><div class="mt" id="confTitle" style="color:var(--er)"><i class="ti ti-alert-triangle"></i>Confirmar Exclusão</div><div class="bic" onclick="closeModal('mConf')"><i class="ti ti-x"></i></div></div>
     <div class="mb"><p id="confMsg" style="font-size:13.5px;color:var(--t2);line-height:1.6"></p></div>
     <div class="mf"><button class="btn btn-o" onclick="closeModal('mConf')">Cancelar</button><button class="btn" style="background:var(--er);color:#fff" id="confBtn">Excluir</button></div>
   </div>
@@ -893,7 +893,23 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function toast(msg,type=''){ const t=document.getElementById('toast'),el=document.createElement('div'); el.className='tst '+(type||''); el.innerHTML=`<i class="ti ${type==='s'?'ti-circle-check':type==='d'?'ti-alert-triangle':'ti-info-circle'}"></i>${msg}`; t.appendChild(el); setTimeout(()=>{ el.style.animation='sOut .3s ease forwards'; setTimeout(()=>el.remove(),300); },3200); }
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
-function confirm2(msg,cb){ document.getElementById('confMsg').textContent=msg; document.getElementById('confBtn').onclick=()=>{ cb(); closeModal('mConf'); }; openModal('mConf'); }
+function confirm2(msg,cb,opts){
+  opts = opts || {};
+  document.getElementById('confMsg').textContent = msg;
+  // Title + icon
+  const titleEl = document.getElementById('confTitle');
+  if(titleEl){
+    titleEl.innerHTML = '<i class="ti '+(opts.icon||'ti-alert-triangle')+'"></i>'+(opts.title||'Confirmar Exclusão');
+    titleEl.style.color = opts.titleColor || 'var(--er)';
+  }
+  // Button
+  const btn = document.getElementById('confBtn');
+  btn.textContent = opts.btnLabel || 'Excluir';
+  btn.style.background = opts.btnColor || 'var(--er)';
+  btn.style.color = '#fff';
+  btn.onclick = ()=>{ cb(); closeModal('mConf'); };
+  openModal('mConf');
+}
 
 // ============================================================
 // NOTIFICAÇÕES
@@ -2142,10 +2158,10 @@ function toggleChk(id){ const el=document.querySelector('[data-chk="'+id+'"]'); 
 function toggleAllChk(){ const rows=document.querySelectorAll('#treinTB tr, #docTB tr'); const allEl=document.getElementById('chkAllTrein')||document.getElementById('chkAllDoc'); const allSel=allEl&&allEl.classList.contains('on'); rows.forEach(r=>{const chk=r.querySelector('[data-chk]');if(!chk)return;const id=chk.dataset.chk;if(allSel){selectedIds.delete(id);chk.classList.remove('on');r.classList.remove('selected');}else{selectedIds.add(id);chk.classList.add('on');r.classList.add('selected');}}); if(allEl)allEl.classList.toggle('on',!allSel); updateBulkBar(); }
 function updateBulkBar(){ const bar=document.getElementById('bulkBar'),info=document.getElementById('bulkInfo'),n=selectedIds.size; if(bar)bar.style.display=n>0?'flex':'none'; if(info)info.textContent=n+' selecionado(s)'; document.querySelectorAll('[data-chk]').forEach(el=>{const row=el.closest('tr');if(row)row.classList.toggle('selected',selectedIds.has(el.dataset.chk));}); }
 function clearBulk(){ selectedIds.clear(); updateBulkBar(); document.querySelectorAll('.chk-row').forEach(el=>el.classList.remove('on')); document.querySelectorAll('tr.selected').forEach(r=>r.classList.remove('selected')); }
-async function bulkObsolete(table){ if(!selectedIds.size){toast('Selecione pelo menos um item','d');return;} confirm2('Mover '+selectedIds.size+' item(ns) para Obsoletos?',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; const ids=Array.from(selectedIds); await sb.from(table).update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).in('id',ids); selectedIds.clear(); hideLoading(); toast(ids.length+' item(ns) movido(s) para Obsoletos','s'); render(); }); }
-async function marcarObsoletoTrein(id,nome){ confirm2('Mover "'+nome+'" para Obsoletos?',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; await sb.from('treinamentos').update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).eq('id',id); hideLoading(); toast('Movido para Obsoletos','s'); renderTrein(false); }); }
+async function bulkObsolete(table){ if(!selectedIds.size){toast('Selecione pelo menos um item','d');return;} confirm2(selectedIds.size+' item(ns) serão movidos para a aba Obsoletos, onde ficam arquivados por 5 anos. Podem ser restaurados a qualquer momento.',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; const ids=Array.from(selectedIds); await sb.from(table).update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).in('id',ids); selectedIds.clear(); hideLoading(); toast(ids.length+' item(ns) movido(s) para Obsoletos','s'); render(); }, {title:'Mover para Obsoletos', titleColor:'var(--y)', icon:'ti-archive', btnLabel:'Mover para Obsoletos', btnColor:'var(--y)'}); }
+async function marcarObsoletoTrein(id,nome){ confirm2('O treinamento "'+nome+'" será movido para a aba Obsoletos, onde fica arquivado. Pode ser restaurado a qualquer momento.',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; await sb.from('treinamentos').update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).eq('id',id); hideLoading(); toast('Movido para Obsoletos','s'); renderTrein(false); }, {title:'Mover para Obsoletos', titleColor:'var(--y)', icon:'ti-archive', btnLabel:'Mover para Obsoletos', btnColor:'var(--y)'}); }
 async function restaurarTrein(id){ showLoading('Restaurando...'); await sb.from('treinamentos').update({obsoleto:false,obsoleto_em:null,obsoleto_por:''}).eq('id',id); hideLoading(); toast('Treinamento restaurado!','s'); renderTrein(true); }
-async function marcarObsoletoDoc(id,nome){ confirm2('Mover "'+nome+'" para Obsoletos?',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; await sb.from('documentos').update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).eq('id',id); hideLoading(); toast('Movido para Obsoletos','s'); render(); }); }
+async function marcarObsoletoDoc(id,nome){ confirm2('O documento "'+nome+'" será movido para a aba Obsoletos, onde fica arquivado por 5 anos. Você pode restaurá-lo a qualquer momento.',async()=>{ showLoading('Movendo...'); const {data:{session}}=await sb.auth.getSession(); const user=session?.user?.email||'usuário'; await sb.from('documentos').update({obsoleto:true,obsoleto_em:new Date().toISOString(),obsoleto_por:user}).eq('id',id); hideLoading(); toast('Movido para Obsoletos','s'); render(); }, {title:'Mover para Obsoletos', titleColor:'var(--y)', icon:'ti-archive', btnLabel:'Mover para Obsoletos', btnColor:'var(--y)'}); }
 async function restaurarDoc(id){ showLoading('Restaurando...'); await sb.from('documentos').update({obsoleto:false,obsoleto_em:null,obsoleto_por:''}).eq('id',id); hideLoading(); toast('Documento restaurado!','s'); render(); }
 
 
