@@ -814,6 +814,7 @@ const NAV=[
     {id:'op_exped',lbl:'Expedição'}
   ]},
   {sep:true,lbl:'Gestão'},
+  {id:'mestra',ico:'ti-list-check',lbl:'Lista Mestra'},
   {id:'trein',ico:'ti-school',lbl:'Treinamentos'},
   {id:'audit',ico:'ti-clipboard-check',lbl:'Auditorias'},
   {sep:true,lbl:'Sistema'},
@@ -1687,6 +1688,7 @@ async function render(){
     if(curV==='usuarios'){ await renderUsuarios(); return; }
     if(curV==='trein'){ await renderTrein(); return; }
     if(curV==='audit'){ await renderAudit(); return; }
+    if(curV==='mestra'){ await renderListaMestra(); return; }
     if(PASTA_VIEWS.includes(curV)){ await renderQualif(); return; }
     if(OP_VIEWS.includes(curV)){ await renderOperacional(); return; }
     await renderDocs();
@@ -3065,6 +3067,192 @@ document.addEventListener('click', e => {
   if(np&&nb&&!np.contains(e.target)&&!nb.contains(e.target)) np.classList.remove('open');
   document.querySelectorAll('.mo').forEach(m=>{ if(e.target===m) m.classList.remove('open'); });
 });
+
+// ============================================================
+// LISTA MESTRA (Master Document List)
+// ============================================================
+let _mestraSortBy = 'modulo';
+let _mestraFilterStatus = 'all';
+
+async function renderListaMestra(){
+  const c = document.getElementById('cnt');
+  try {
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,versao,status,data_emissao').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
+    const { data: docs } = await query;
+    const D = docs || [];
+    D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
+
+    // Apply status filter
+    let filtered = D;
+    if(_mestraFilterStatus === 'v') filtered = D.filter(d=>d._ls==='v');
+    else if(_mestraFilterStatus === 'p') filtered = D.filter(d=>d._ls==='p');
+    else if(_mestraFilterStatus === 'x') filtered = D.filter(d=>d._ls==='x');
+
+    // Apply sort
+    filtered = filtered.slice().sort((a,b)=>{
+      if(_mestraSortBy === 'validade'){
+        const av = a.val_indeterminada ? '9999-99-99' : (a.data_validade||'9999-99-98');
+        const bv = b.val_indeterminada ? '9999-99-99' : (b.data_validade||'9999-99-98');
+        return av > bv ? 1 : av < bv ? -1 : 0;
+      }
+      if(_mestraSortBy === 'nome') return (a.nome||'').localeCompare(b.nome||'');
+      if(_mestraSortBy === 'responsavel') return (a.responsavel||'').localeCompare(b.responsavel||'');
+      // default: modulo
+      const am = (a.modulo||'')+(a.submodulo||''), bm = (b.modulo||'')+(b.submodulo||'');
+      return am.localeCompare(bm);
+    });
+
+    const total = D.length;
+    const vigs = D.filter(d=>d._ls==='v').length;
+    const prox = D.filter(d=>d._ls==='p').length;
+    const venc = D.filter(d=>d._ls==='x').length;
+
+    let rows = '';
+    if(filtered.length === 0){
+      rows = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--t3)">Nenhum documento encontrado para este filtro.</td></tr>';
+    } else {
+      filtered.forEach(d=>{
+        const val = d.val_indeterminada ? '<span style="color:var(--ok)">Indeterminada</span>' : (d.data_validade ? fd(d.data_validade) : '—');
+        rows += '<tr>'+
+          '<td style="font-weight:600">'+esc(d.nome)+'</td>'+
+          '<td style="color:var(--t2)">'+esc(d.modulo||'—')+(d.submodulo?' · '+esc(d.submodulo):'')+'</td>'+
+          (filialAtiva==='todas'?'<td><span style="font-size:10px;font-weight:700;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:1px 7px;border-radius:20px">'+esc(d.filial||'—')+'</span></td>':'')+
+          '<td style="text-align:center">'+esc(d.versao||'1.0')+'</td>'+
+          '<td>'+esc(d.responsavel||'—')+'</td>'+
+          '<td style="text-align:center">'+val+'</td>'+
+          '<td style="text-align:center">'+stB(d._ls)+'</td>'+
+          '</tr>';
+      });
+    }
+
+    const filialLabel = filialAtiva==='todas' ? 'Todas as Filiais' : filialAtiva;
+
+    c.innerHTML =
+      '<div class="ph">'+
+        '<div class="ph-l"><div class="ph-bar"></div><div>'+
+          '<div class="pt">Lista Mestra de Documentos</div>'+
+          '<div class="ps">'+esc(filialLabel)+' · '+total+' documento(s) controlado(s)</div>'+
+        '</div></div>'+
+        '<button class="btn btn-l" onclick="exportListaMestra()"><i class="ti ti-file-spreadsheet"></i>Exportar PDF</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--p)"><div style="font-size:26px;font-weight:800;color:var(--p)">'+total+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Total</div></div>'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--ok)"><div style="font-size:26px;font-weight:800;color:var(--ok)">'+vigs+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Vigentes</div></div>'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--wn)"><div style="font-size:26px;font-weight:800;color:var(--wn)">'+prox+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Próximos</div></div>'+
+        '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--er)"><div style="font-size:26px;font-weight:800;color:var(--er)">'+venc+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Vencidos</div></div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'+
+          '<div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--t2);font-weight:600">Status:</span>'+
+            '<select class="fi" style="width:auto;padding:6px 10px;font-size:12.5px" onchange="setMestraFilter(this.value)">'+
+              '<option value="all"'+(_mestraFilterStatus==='all'?' selected':'')+'>Todos</option>'+
+              '<option value="v"'+(_mestraFilterStatus==='v'?' selected':'')+'>Vigentes</option>'+
+              '<option value="p"'+(_mestraFilterStatus==='p'?' selected':'')+'>Próximos ao venc.</option>'+
+              '<option value="x"'+(_mestraFilterStatus==='x'?' selected':'')+'>Vencidos</option>'+
+            '</select>'+
+          '</div>'+
+          '<div style="display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--t2);font-weight:600">Ordenar por:</span>'+
+            '<select class="fi" style="width:auto;padding:6px 10px;font-size:12.5px" onchange="setMestraSort(this.value)">'+
+              '<option value="modulo"'+(_mestraSortBy==='modulo'?' selected':'')+'>Módulo</option>'+
+              '<option value="validade"'+(_mestraSortBy==='validade'?' selected':'')+'>Validade (vencer 1º)</option>'+
+              '<option value="nome"'+(_mestraSortBy==='nome'?' selected':'')+'>Nome</option>'+
+              '<option value="responsavel"'+(_mestraSortBy==='responsavel'?' selected':'')+'>Responsável</option>'+
+            '</select>'+
+          '</div>'+
+          '<div style="margin-left:auto;font-size:12px;color:var(--t3)">'+filtered.length+' exibido(s)</div>'+
+        '</div>'+
+        '<div class="tw"><table>'+
+          '<thead><tr>'+
+            '<th>Documento</th><th>Módulo</th>'+
+            (filialAtiva==='todas'?'<th>Filial</th>':'')+
+            '<th style="text-align:center">Versão</th><th>Responsável</th>'+
+            '<th style="text-align:center">Validade</th><th style="text-align:center">Status</th>'+
+          '</tr></thead><tbody>'+rows+'</tbody>'+
+        '</table></div>'+
+      '</div>';
+  } catch(e){
+    console.error('renderListaMestra error:', e);
+    c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><div class="empty-t">Erro ao carregar Lista Mestra</div><p style="font-size:12px;color:var(--t3)">'+(e.message||'')+'</p><button class="btn btn-o" style="margin-top:10px" onclick="render()">Tentar novamente</button></div></div>';
+  }
+}
+
+function setMestraFilter(v){ _mestraFilterStatus = v; renderListaMestra(); }
+function setMestraSort(v){ _mestraSortBy = v; renderListaMestra(); }
+
+async function exportListaMestra(){
+  showLoading('Gerando Lista Mestra...');
+  try {
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,versao,status,data_emissao').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
+    const { data: docs } = await query;
+    const D = docs || [];
+    D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
+
+    // Sort by module then name
+    D.sort((a,b)=>{
+      const am=(a.modulo||'')+(a.submodulo||''), bm=(b.modulo||'')+(b.submodulo||'');
+      const c1=am.localeCompare(bm);
+      return c1!==0?c1:(a.nome||'').localeCompare(b.nome||'');
+    });
+
+    const hoje = new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const filialLabel = filialAtiva==='todas' ? 'Todas as Filiais' : filialAtiva;
+    const stLabel = {v:'Vigente',p:'Próximo ao Venc.',x:'Vencido'};
+    const stColor = {v:'#27AE60',p:'#F5A623',x:'#E53E3E'};
+
+    let rowsHtml = '';
+    D.forEach((d,i)=>{
+      const val = d.val_indeterminada ? 'Indeterminada' : (d.data_validade ? d.data_validade.split('-').reverse().join('/') : '—');
+      rowsHtml += '<tr style="background:'+(i%2?'#fff':'#f9f9f9')+'">'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5">'+esc(d.nome)+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5;color:#555">'+esc(d.modulo||'—')+(d.submodulo?' · '+esc(d.submodulo):'')+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5;text-align:center;color:#555">'+esc(d.filial||'—')+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5;text-align:center">'+esc(d.versao||'1.0')+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5">'+esc(d.responsavel||'—')+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5;text-align:center">'+val+'</td>'+
+        '<td style="padding:6px 8px;border:1px solid #e5e5e5;text-align:center;color:'+(stColor[d._ls]||'#666')+';font-weight:700">'+(stLabel[d._ls]||'—')+'</td>'+
+        '</tr>';
+    });
+
+    const vigs=D.filter(d=>d._ls==='v').length, prox=D.filter(d=>d._ls==='p').length, venc=D.filter(d=>d._ls==='x').length;
+
+    let html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista Mestra — '+esc(CFG.empresa)+'</title>';
+    html+='<style>body{font-family:Arial,sans-serif;margin:25px;color:#222}@media print{.no-print{display:none}}</style></head><body>';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:2px solid #1B4F5E;padding-bottom:12px">';
+    html+='<div><h1 style="margin:0;color:#1B4F5E;font-size:22px">Lista Mestra de Documentos</h1><div style="color:#666;font-size:12px">'+esc(CFG.empresa)+' · '+esc(filialLabel)+'</div></div>';
+    html+='<div style="text-align:right;font-size:11px;color:#666"><div>Emitido: '+hoje+'</div><div>Total: '+D.length+' documentos</div></div></div>';
+    html+='<div style="display:flex;gap:10px;margin-bottom:16px;font-size:12px">';
+    html+='<span style="padding:4px 12px;background:#eafaf0;color:#27AE60;border-radius:6px;font-weight:700">Vigentes: '+vigs+'</span>';
+    html+='<span style="padding:4px 12px;background:#fef6e7;color:#F5A623;border-radius:6px;font-weight:700">Próximos: '+prox+'</span>';
+    html+='<span style="padding:4px 12px;background:#fdeaea;color:#E53E3E;border-radius:6px;font-weight:700">Vencidos: '+venc+'</span></div>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+    html+='<thead><tr style="background:#1B4F5E;color:#fff">';
+    html+='<th style="padding:8px;text-align:left;border:1px solid #1B4F5E">Documento</th>';
+    html+='<th style="padding:8px;text-align:left;border:1px solid #1B4F5E">Módulo</th>';
+    html+='<th style="padding:8px;text-align:center;border:1px solid #1B4F5E">Filial</th>';
+    html+='<th style="padding:8px;text-align:center;border:1px solid #1B4F5E">Versão</th>';
+    html+='<th style="padding:8px;text-align:left;border:1px solid #1B4F5E">Responsável</th>';
+    html+='<th style="padding:8px;text-align:center;border:1px solid #1B4F5E">Validade</th>';
+    html+='<th style="padding:8px;text-align:center;border:1px solid #1B4F5E">Status</th>';
+    html+='</tr></thead><tbody>'+rowsHtml+'</tbody></table>';
+    html+='<div style="margin-top:25px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#999;text-align:center">Lista Mestra gerada pelo SGQ '+esc(CFG.empresa)+' em '+hoje+' · Documento controlado · Conforme RDC 430/2020</div>';
+    html+='<div class="no-print" style="margin-top:18px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#1B4F5E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">Imprimir / Salvar PDF</button></div>';
+    html+='</body></html>';
+
+    hideLoading();
+    const w = window.open('','_blank');
+    if(!w){ toast('Permita pop-ups para gerar o PDF','d'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(()=>w.print(), 800);
+    logActivity('exportar','Lista Mestra','','','Lista Mestra exportada · '+filialLabel);
+  } catch(e){
+    hideLoading();
+    toast('Erro ao gerar Lista Mestra: '+e.message,'d');
+    console.error('exportListaMestra:', e);
+  }
+}
 
 // ============================================================
 // INIT
