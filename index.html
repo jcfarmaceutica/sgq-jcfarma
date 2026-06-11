@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2064,7 +2065,7 @@ async function renderDocs(){
         '<div class="pt">'+esc(lbl)+'</div>'+
         '<div class="ps">Gestão Documental</div>'+
       '</div></div>'+
-      (obsTab?'':'<button class="btn btn-l" id="btnNDoc"><i class="ti ti-plus"></i>Novo Documento</button>')+
+      (obsTab?'':'<div style="display:flex;gap:8px"><button class="btn btn-o" onclick="exportDocsExcel()"><i class="ti ti-table-export"></i>Excel</button><button class="btn btn-l" id="btnNDoc"><i class="ti ti-plus"></i>Novo Documento</button></div>')+
     '</div>'+
     '<div class="tab-bar">'+
       '<div class="tab-btn '+(obsTab?'':'act')+'" onclick="window._docsObsTab=false;render()"><i class="ti ti-files"></i>Ativos <span class="cnt-badge">'+D.length+'</span></div>'+
@@ -3236,7 +3237,7 @@ async function renderListaMestra(){
           '<div class="pt">Lista Mestra de Documentos</div>'+
           '<div class="ps">'+esc(filialLabel)+' · '+total+' documento(s) controlado(s)</div>'+
         '</div></div>'+
-        '<button class="btn btn-l" onclick="exportListaMestra()"><i class="ti ti-file-spreadsheet"></i>Exportar PDF</button>'+
+        '<div style="display:flex;gap:8px">'+'<button class="btn btn-o" onclick="exportMestraExcel()"><i class="ti ti-table-export"></i>Excel</button>'+'<button class="btn btn-l" onclick="exportListaMestra()"><i class="ti ti-file-type-pdf"></i>PDF</button>'+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">'+
         '<div class="card" style="padding:16px;text-align:center;border-top:3px solid var(--p)"><div style="font-size:26px;font-weight:800;color:var(--p)">'+total+'</div><div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">Total</div></div>'+
@@ -3613,6 +3614,118 @@ function calNav(delta){
   if(_calMonth < 0){ _calMonth = 11; _calYear--; }
   else if(_calMonth > 11){ _calMonth = 0; _calYear++; }
   renderCalendario();
+}
+
+// Export current module documents to Excel
+async function exportDocsExcel(){
+  if(typeof XLSX === 'undefined'){ toast('Biblioteca Excel não carregada. Recarregue a página.','d'); return; }
+  showLoading('Gerando Excel...');
+  try {
+    const v = curV; const lbl = MMAP[v]||MMOD[v]||SMAP[v]||v;
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_emissao,data_validade,val_indeterminada,versao,status,tags,observacoes').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
+    if(MMOD[v]) query = query.eq('modulo', MMOD[v]);
+    else if(SMAP[v]) query = query.eq('submodulo', SMAP[v]);
+    const { data: docs } = await query;
+    const D = docs || [];
+    D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
+    D.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+
+    if(D.length === 0){ hideLoading(); toast('Nenhum documento para exportar','d'); return; }
+
+    const stLabel = {v:'Vigente',p:'Próximo ao Vencimento',x:'Vencido'};
+    const header = ['Documento','Módulo','Submódulo','Filial','Versão','Responsável','Data Emissão','Data Validade','Status','Tags','Observações'];
+    const rows = [header];
+    D.forEach(d=>{
+      rows.push([
+        d.nome||'', d.modulo||'', d.submodulo||'', d.filial||'', d.versao||'1.0', d.responsavel||'',
+        d.data_emissao ? d.data_emissao.split('-').reverse().join('/') : '',
+        d.val_indeterminada ? 'Indeterminada' : (d.data_validade ? d.data_validade.split('-').reverse().join('/') : ''),
+        stLabel[d._ls]||'', d.tags||'', d.observacoes||''
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{wch:35},{wch:22},{wch:20},{wch:12},{wch:8},{wch:20},{wch:13},{wch:13},{wch:20},{wch:20},{wch:30}];
+    ws['!freeze'] = { xSplit:0, ySplit:1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Documentos');
+    const filialLabel = filialAtiva==='todas' ? 'Todas' : filialAtiva;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fname = esc(lbl).replace(/[^a-zA-Z0-9]/g,'_')+'_'+filialLabel.replace(/\s+/g,'_')+'_'+dateStr+'.xlsx';
+    XLSX.writeFile(wb, fname);
+    hideLoading();
+    toast('Excel exportado: '+D.length+' documentos','s');
+    logActivity('exportar',lbl,'','','Excel exportado · '+filialLabel);
+  } catch(e){
+    hideLoading();
+    toast('Erro ao gerar Excel: '+e.message,'d');
+    console.error('exportDocsExcel:', e);
+  }
+}
+
+// ============================================================
+// EXPORTAÇÃO EXCEL (SheetJS)
+// ============================================================
+async function exportMestraExcel(){
+  if(typeof XLSX === 'undefined'){ toast('Biblioteca Excel não carregada. Recarregue a página.','d'); return; }
+  showLoading('Gerando Excel...');
+  try {
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_emissao,data_validade,val_indeterminada,versao,status,tags,observacoes').eq('obsoleto',false);
+    if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
+    const { data: docs } = await query;
+    const D = docs || [];
+    D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
+    D.sort((a,b)=>{
+      const am=(a.modulo||'')+(a.submodulo||''), bm=(b.modulo||'')+(b.submodulo||'');
+      const c1=am.localeCompare(bm);
+      return c1!==0?c1:(a.nome||'').localeCompare(b.nome||'');
+    });
+
+    const stLabel = {v:'Vigente',p:'Próximo ao Vencimento',x:'Vencido'};
+
+    // Build rows as array of arrays
+    const header = ['Documento','Módulo','Submódulo','Filial','Versão','Responsável','Data Emissão','Data Validade','Status','Tags','Observações'];
+    const rows = [header];
+    D.forEach(d=>{
+      rows.push([
+        d.nome||'',
+        d.modulo||'',
+        d.submodulo||'',
+        d.filial||'',
+        d.versao||'1.0',
+        d.responsavel||'',
+        d.data_emissao ? d.data_emissao.split('-').reverse().join('/') : '',
+        d.val_indeterminada ? 'Indeterminada' : (d.data_validade ? d.data_validade.split('-').reverse().join('/') : ''),
+        stLabel[d._ls]||'',
+        d.tags||'',
+        d.observacoes||''
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Column widths
+    ws['!cols'] = [{wch:35},{wch:22},{wch:20},{wch:12},{wch:8},{wch:20},{wch:13},{wch:13},{wch:20},{wch:20},{wch:30}];
+    // Freeze header row
+    ws['!freeze'] = { xSplit:0, ySplit:1 };
+
+    const wb = XLSX.utils.book_new();
+    const sheetName = (filialAtiva==='todas' ? 'Todas' : filialAtiva).substring(0,31);
+    XLSX.utils.book_append_sheet(wb, ws, 'Lista Mestra');
+
+    const filialLabel = filialAtiva==='todas' ? 'Todas' : filialAtiva;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fname = 'Lista_Mestra_'+filialLabel.replace(/\s+/g,'_')+'_'+dateStr+'.xlsx';
+
+    XLSX.writeFile(wb, fname);
+    hideLoading();
+    toast('Excel exportado: '+D.length+' documentos','s');
+    logActivity('exportar','Lista Mestra','','','Excel exportado · '+filialLabel);
+  } catch(e){
+    hideLoading();
+    toast('Erro ao gerar Excel: '+e.message,'d');
+    console.error('exportMestraExcel:', e);
+  }
 }
 
 // ============================================================
