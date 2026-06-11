@@ -1916,6 +1916,40 @@ async function switchDashFilial(nome){
   render();
 }
 
+// Toggle obsoleto group expand/collapse
+function toggleObsGroup(gid){
+  const chev = document.getElementById('chev_'+gid);
+  const children = document.querySelectorAll('.obs-child-'+gid);
+  if(!children.length) return;
+  const isOpen = children[0].style.display !== 'none';
+  children.forEach(c=>{ c.style.display = isOpen ? 'none' : 'table-row'; });
+  if(chev) chev.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+// Build a single obsoleto document row (for grouped view)
+function buildObsRow(d, arqMap, groupId, isChild){
+  const arqs = arqMap[d.id] || [];
+  const filesHtml = arqs.length
+    ? arqs.map(f=>'<span class="ftag" data-dl="'+f.id+'"><i class="ti ti-file-download"></i>'+esc(f.nome.substring(0,12))+(f.nome.length>12?'...':'')+'</span>').join('')
+    : '<span style="color:var(--t3);font-size:11.5px">Sem arquivo</span>';
+  const tagsHtml = (d.tags||'').split(',').filter(Boolean).slice(0,3).map(t=>'<span class="chip l">'+esc(t.trim())+'</span>').join('');
+  const obsInfo = d.obsoleto_em ? '<div style="font-size:10.5px;color:var(--t3);margin-top:2px"><i class="ti ti-archive" style="font-size:10px"></i> Obsoleto em '+fd(d.obsoleto_em)+(d.obsoleto_por?' por '+esc(d.obsoleto_por):'')+'</div>' : '';
+  const childAttr = isChild ? ' class="obs-child obs-child-'+groupId+'" style="display:none;background:var(--bg)"' : '';
+  const indent = isChild ? 'padding-left:24px;' : '';
+  return '<tr'+childAttr+' data-stat="x" data-resp="'+esc(d.responsavel||'')+'" data-nome="'+(d.nome||'').toLowerCase()+'">'+
+    '<td style="width:28px"><div class="chk-row" data-chk="'+d.id+'"><i class="ti ti-check" style="font-size:11px"></i></div></td>'+
+    '<td><div style="font-weight:600;'+indent+'">'+esc(d.nome)+'</div><div style="margin-top:3px;'+indent+'">'+tagsHtml+'</div>'+obsInfo+'</td>'+
+    '<td><span class="chip p">v'+esc(d.versao||'1.0')+'</span></td>'+
+    '<td style="color:var(--t2)">'+esc(d.responsavel||'—')+'</td>'+
+    '<td>'+fd(d.data_emissao)+'</td>'+
+    '<td>'+(d.val_indeterminada?'<span class="st v"><span class="st-dot"></span>Indeterminada</span>':stB(d.data_validade?calcStat(d.data_validade):d.status))+'</td>'+
+    '<td style="max-width:160px"><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">'+filesHtml+'</div></td>'+
+    '<td><div style="display:flex;gap:3px">'+
+      '<div class="bic edt" data-restoredoc="'+d.id+'" title="Restaurar"><i class="ti ti-refresh"></i></div>'+
+      '<div class="bic del" data-deldoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Excluir definitivamente"><i class="ti ti-trash"></i></div>'+
+    '</div></td></tr>';
+}
+
 async function renderDocs(){
   try {
   const v=curV; const lbl=MMAP[v]||v;
@@ -1943,6 +1977,53 @@ async function renderDocs(){
   }
   // Group by filial when viewing all
   let lastFilial='';
+  // OBSOLETOS: grouped view by base document name
+  if(obsTab && D.length > 0){
+    // Group by normalized base name
+    const groups = {};
+    D.forEach(d=>{
+      // Normalize: remove version numbers, dates, trailing digits
+      let base = (d.nome||'Sem nome').replace(/\s*[-–]\s*(v?\d+[\.\d]*|\d{2}\/\d{2}\/\d{2,4}|\d{4})\s*$/i,'').replace(/\s+\d+$/,'').trim();
+      if(!base) base = d.nome||'Sem nome';
+      const key = (d.filial||'')+'|||'+base;
+      if(!groups[key]) groups[key] = { base, filial:d.filial, docs:[] };
+      groups[key].docs.push(d);
+    });
+    const groupKeys = Object.keys(groups).sort((a,b)=>{
+      const ga=groups[a], gb=groups[b];
+      if((ga.filial||'') !== (gb.filial||'')) return (ga.filial||'').localeCompare(gb.filial||'');
+      return ga.base.localeCompare(gb.base);
+    });
+    let lastFil2 = '';
+    groupKeys.forEach((gk,gi)=>{
+      const g = groups[gk];
+      // Filial header
+      if(filialAtiva==='todas' && g.filial && g.filial!==lastFil2){
+        lastFil2 = g.filial;
+        rows+='<tr style="background:var(--pxl)"><td colspan="10" style="padding:7px 13px;font-size:11px;font-weight:700;color:var(--p);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bd2)"><i class="ti ti-building" style="margin-right:6px"></i>'+esc(g.filial)+'</td></tr>';
+      }
+      // Sort docs newest first
+      g.docs.sort((a,b)=>(b.obsoleto_em||b.criado_em||'').localeCompare(a.obsoleto_em||a.criado_em||''));
+      const gid = 'obsg_'+gi;
+      if(g.docs.length > 1){
+        // Collapsible group header
+        rows+='<tr class="obs-group-hd" data-obsgroup="'+gid+'" style="cursor:pointer;background:var(--bg)">'+
+          '<td style="width:28px;text-align:center"><i class="ti ti-chevron-right obs-chev" id="chev_'+gid+'" style="transition:transform .2s"></i></td>'+
+          '<td colspan="9" style="padding:9px 13px">'+
+            '<span style="font-weight:700;font-size:13px;color:var(--p)"><i class="ti ti-folder" style="margin-right:6px;color:var(--y)"></i>'+esc(g.base)+'</span>'+
+            '<span style="font-size:11px;font-weight:700;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:2px 9px;border-radius:20px;margin-left:10px">'+g.docs.length+' versões obsoletas</span>'+
+          '</td>'+
+        '</tr>';
+        // Child rows (hidden by default)
+        g.docs.forEach(d=>{
+          rows += buildObsRow(d, arqMap, gid, true);
+        });
+      } else {
+        // Single doc - show directly without group
+        rows += buildObsRow(g.docs[0], arqMap, '', false);
+      }
+    });
+  } else {
   D.forEach(d=>{
     const arqs=arqMap[d.id]||[];
     const filesHtml=arqs.length
@@ -1974,6 +2055,7 @@ async function renderDocs(){
            '<div class="bic del" data-obsdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>')+
       '</div></td></tr>';
   });
+  }
 
   const c=document.getElementById('cnt');
   c.innerHTML=
@@ -3057,6 +3139,8 @@ document.getElementById('cnt').addEventListener('click', e => {
   if(t.closest('[data-hist]')){ showHistory(t.closest('[data-hist]').dataset.hist); return; }
   if(t.closest('[data-dup]')){ duplicateDoc(t.closest('[data-dup]').dataset.dup); return; }
   if(t.closest('[data-obsdoc]')){ const b=t.closest('[data-obsdoc]'); marcarObsoletoDoc(b.dataset.obsdoc,b.dataset.delnome); return; }
+  if(t.closest('[data-obsgroup]')){ toggleObsGroup(t.closest('[data-obsgroup]').dataset.obsgroup); return; }
+  if(t.closest('[data-deldoc]')){ const b=t.closest('[data-deldoc]'); confirm2(`Excluir DEFINITIVAMENTE "${b.dataset.delnome}"? Esta ação não pode ser desfeita.`,()=>delDoc(b.dataset.deldoc)); return; }
   if(t.closest('[data-restoredoc]')){ restaurarDoc(t.closest('[data-restoredoc]').dataset.restoredoc); return; }
   if(t.closest('[data-chk]')){ toggleChk(t.closest('[data-chk]').dataset.chk); return; }
   if(t.closest('[data-edit]')){ editDoc(t.closest('[data-edit]').dataset.edit); return; }
