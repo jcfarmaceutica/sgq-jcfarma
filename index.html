@@ -300,6 +300,7 @@ textarea.fi{resize:vertical;min-height:70px}
 .tab-btn .cnt-badge{background:var(--bg);border:1px solid var(--bd);color:var(--t2);font-size:10px;padding:1px 6px;border-radius:10px;font-weight:700}
 .tab-btn.act .cnt-badge{background:var(--pxl);border-color:var(--pl);color:var(--p)}
 .obs-tab .cnt-badge{background:#FFF3E0;border-color:#FFB74D;color:#E65100}
+.lix-tab .cnt-badge{background:#FDEAEA;border-color:#F5B7B7;color:#C0392B}
 /* BULK SELECT */
 .bulk-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--pxl);border:1px solid var(--pl);border-radius:9px;margin-bottom:12px;flex-wrap:wrap}
 .bulk-info{font-size:12.5px;font-weight:600;color:var(--p);flex:1}
@@ -865,7 +866,7 @@ function setBc(a,b){
   if(b) el.innerHTML=`<span class="bc-i">SGQ</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-i">${a}</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-c">${b}</span>`;
   else el.innerHTML=`<span class="bc-i">SGQ</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-c">${a}</span>`;
 }
-function navigate(id,parent,label){ curV=id; curParent=parent||null; curLabel=label||null; curPastaId=null; curPastaNome=''; window._docsObsTab=false; window._treinObsTab=false; selectedIds=new Set(); curOpAno=null; curOpMes=null; buildNav(); if(parent&&label) setBc(parent,label); else { const ni=NAV.find(n=>n.id===id); setBc(ni?ni.lbl:label||id); } render(); }
+function navigate(id,parent,label){ curV=id; curParent=parent||null; curLabel=label||null; curPastaId=null; curPastaNome=''; window._docsObsTab=false; window._docsTab='ativos'; window._treinObsTab=false; selectedIds=new Set(); curOpAno=null; curOpMes=null; buildNav(); if(parent&&label) setBc(parent,label); else { const ni=NAV.find(n=>n.id===id); setBc(ni?ni.lbl:label||id); } render(); }
 
 // ============================================================
 // HELPERS
@@ -942,6 +943,7 @@ async function buildNotifs(){
   let popsQ = sb.from('documentos')
     .select('id,nome,data_validade,filial,pasta_id')
     .eq('obsoleto',false)
+    .is('excluido_em',null)
     .not('pasta_id','is',null)
     .not('data_validade','is',null)
     .lte('data_validade', new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
@@ -1254,7 +1256,7 @@ async function delDoc(id){ showLoading('Excluindo...'); await sb.from('documento
 // SEARCH
 async function doSearch(val){
   if(!val){ render(); return; }
-  let searchQ = sb.from('documentos').select('*').eq('obsoleto',false).ilike('nome','%'+val+'%');
+  let searchQ = sb.from('documentos').select('*').eq('obsoleto',false).is('excluido_em',null).ilike('nome','%'+val+'%');
   if(filialAtiva !== 'todas'){
     searchQ = searchQ.eq('filial',filialAtiva);
   }
@@ -1741,7 +1743,7 @@ async function renderDash(){
   const filQ=(t)=>{ if(filialAtiva==='todas') return t; return t.eq('filial',filialAtiva); };
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
-    filQ(sb.from('documentos').select('*')).eq('obsoleto',false).order('criado_em',{ascending:false}),
+    filQ(sb.from('documentos').select('*')).eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false}),
     filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false),
     filQ(sb.from('auditorias').select('id,status,data_validade')),
     filQ(popsRevQ),
@@ -1898,7 +1900,8 @@ async function renderDash(){
         '<th>Módulo</th><th>Responsável</th><th>Validade</th><th>Dias Rest.</th><th>Status</th></tr></thead>'+
       '<tbody id="dDBody">'+D.slice(0,8).map(d=>'<tr data-st="'+d.status+'">'+
         '<td><div style="font-weight:600">'+esc(d.nome)+'</div>'+
-          '<div style="margin-top:3px">'+(d.tags||'').split(',').filter(Boolean).slice(0,3).map(t=>'<span class="chip l">'+esc(t.trim())+'</span>').join('')+'</div></td>'+
+          '<div style="margin-top:3px">'+(d.tags||'').split(',').filter(Boolean).slice(0,3).map(t=>'<span class="chip l">'+esc(t.trim())+'</span>').join('')+'</div>'+
+          (lixTab&&d.excluido_em?(function(){ var diasRest=TRASH_DAYS-Math.floor((Date.now()-new Date(d.excluido_em).getTime())/86400000); var cor=diasRest<=2?'var(--er)':'var(--wn)'; return '<div style="font-size:10.5px;color:'+cor+';margin-top:3px;font-weight:700"><i class="ti ti-clock-x" style="font-size:10px"></i> Exclusão em '+Math.max(0,diasRest)+' dia(s)'+(d.excluido_por?' · removido por '+esc(d.excluido_por):'')+'</div>'; })():'')+'</td>'+
         (filialAtiva==='todas'?'<td><span style="font-size:11px;font-weight:600;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:2px 7px;border-radius:20px">'+esc(d.filial||'—')+'</span></td>':'')+
         '<td style="color:var(--t2)">'+esc(d.modulo)+'</td>'+
         '<td style="color:var(--t2)">'+esc(d.responsavel)+'</td>'+
@@ -1963,24 +1966,32 @@ function buildObsRow(d, arqMap, groupId, isChild){
     '<td style="max-width:160px"><div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">'+filesHtml+'</div></td>'+
     '<td><div style="display:flex;gap:3px">'+
       '<div class="bic edt" data-restoredoc="'+d.id+'" title="Restaurar"><i class="ti ti-refresh"></i></div>'+
-      '<div class="bic del" data-deldoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Excluir definitivamente"><i class="ti ti-trash"></i></div>'+
+      '<div class="bic del" data-trashdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>'+
     '</div></td></tr>';
 }
 
 async function renderDocs(){
   try {
   const v=curV; const lbl=MMAP[v]||v;
-  const obsTab=window._docsObsTab||false;
-  let query=sb.from('documentos').select('*').eq('obsoleto',obsTab).order('criado_em',{ascending:false});
-  let queryObs=sb.from('documentos').select('id',{count:'exact',head:true}).eq('obsoleto',true);
+  // Auto-purge trash older than 7 days (lazy cleanup)
+  await purgeOldTrash('documentos');
+  const docTab = window._docsTab || 'ativos'; // 'ativos' | 'obsoletos' | 'lixeira'
+  const obsTab = docTab === 'obsoletos';
+  const lixTab = docTab === 'lixeira';
+  let query=sb.from('documentos').select('*').order('criado_em',{ascending:false});
+  if(lixTab){ query=query.not('excluido_em','is',null); }
+  else { query=query.is('excluido_em',null).eq('obsoleto',obsTab); }
+  let queryObs=sb.from('documentos').select('id',{count:'exact',head:true}).eq('obsoleto',true).is('excluido_em',null);
+  let queryLix=sb.from('documentos').select('id',{count:'exact',head:true}).not('excluido_em','is',null);
   if(filialAtiva!=='todas'){
     query=query.eq('filial',filialAtiva);
     queryObs=queryObs.eq('filial',filialAtiva);
+    queryLix=queryLix.eq('filial',filialAtiva);
   }
-  if(MMOD[v]){ query=query.eq('modulo',MMOD[v]); queryObs=queryObs.eq('modulo',MMOD[v]); }
-  else if(SMAP[v]){ query=query.eq('submodulo',SMAP[v]); queryObs=queryObs.eq('submodulo',SMAP[v]); }
-  const [{data:docs},{count:obsCount}]=await Promise.all([query,queryObs]);
-  const D=docs||[]; const _obsCount=obsCount||0;
+  if(MMOD[v]){ query=query.eq('modulo',MMOD[v]); queryObs=queryObs.eq('modulo',MMOD[v]); queryLix=queryLix.eq('modulo',MMOD[v]); }
+  else if(SMAP[v]){ query=query.eq('submodulo',SMAP[v]); queryObs=queryObs.eq('submodulo',SMAP[v]); queryLix=queryLix.eq('submodulo',SMAP[v]); }
+  const [{data:docs},{count:obsCount},{count:lixCount}]=await Promise.all([query,queryObs,queryLix]);
+  const D=docs||[]; const _obsCount=obsCount||0; const _lixCount=lixCount||0;
   // Live status recalculation
   D.forEach(d=>{ d._ls=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; });
   const vigs=D.filter(d=>d._ls==='v').length,prox=D.filter(d=>d._ls==='p').length,venc=D.filter(d=>d._ls==='x').length;
@@ -2066,8 +2077,12 @@ async function renderDocs(){
         '<span class="ftag" data-upload="'+d.id+'"><i class="ti ti-upload"></i>Upload</span>'+
       '</div></td>'+
       '<td><div style="display:flex;gap:3px">'+
-        (obsTab
-          ?'<div class="bic edt" data-restoredoc="'+d.id+'" title="Restaurar"><i class="ti ti-refresh"></i></div>'
+        (lixTab
+          ?'<div class="bic edt" data-restlix="'+d.id+'" title="Restaurar da Lixeira"><i class="ti ti-arrow-back-up"></i></div>'+
+           '<div class="bic del" data-purgedoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Excluir permanentemente agora"><i class="ti ti-trash-x"></i></div>'
+          :obsTab
+          ?'<div class="bic edt" data-restoredoc="'+d.id+'" title="Restaurar"><i class="ti ti-refresh"></i></div>'+
+           '<div class="bic del" data-trashdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>'
           :'<div class="bic edt" data-edit="'+d.id+'" title="Editar"><i class="ti ti-edit"></i></div>'+
            '<div class="bic del" data-obsdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>')+
       '</div></td></tr>';
@@ -2084,8 +2099,9 @@ async function renderDocs(){
       (obsTab?'':'<div style="display:flex;gap:8px"><button class="btn btn-o" onclick="exportDocsExcel()"><i class="ti ti-table-export"></i>Excel</button><button class="btn btn-l" id="btnNDoc"><i class="ti ti-plus"></i>Novo Documento</button></div>')+
     '</div>'+
     '<div class="tab-bar">'+
-      '<div class="tab-btn '+(obsTab?'':'act')+'" onclick="window._docsObsTab=false;render()"><i class="ti ti-files"></i>Ativos <span class="cnt-badge">'+D.length+'</span></div>'+
-      '<div class="tab-btn obs-tab '+(obsTab?'act':'')+'" onclick="window._docsObsTab=true;render()"><i class="ti ti-archive"></i>Obsoletos <span class="cnt-badge">'+_obsCount+'</span></div>'+
+      '<div class="tab-btn '+(docTab==='ativos'?'act':'')+'" data-doctab="ativos"><i class="ti ti-files"></i>Ativos <span class="cnt-badge">'+D.length+'</span></div>'+
+      '<div class="tab-btn obs-tab '+(obsTab?'act':'')+'" data-doctab="obsoletos"><i class="ti ti-archive"></i>Obsoletos <span class="cnt-badge">'+_obsCount+'</span></div>'+
+      '<div class="tab-btn lix-tab '+(lixTab?'act':'')+'" data-doctab="lixeira"><i class="ti ti-trash"></i>Lixeira <span class="cnt-badge">'+_lixCount+'</span></div>'+
     '</div>'+
     '<div class="sg3">'+
       '<div class="kpi g"><div class="kl">Vigentes</div><div class="kv s">'+vigs+'</div></div>'+
@@ -2109,6 +2125,7 @@ async function renderDocs(){
         '</div>'+
       '</div>'+
       (obsTab?'<div class="al w" style="margin-bottom:12px"><i class="ti ti-info-circle"></i><span style="font-size:12px">Documentos obsoletos são mantidos por 5 anos conforme legislação vigente. Use <strong>Restaurar</strong> para reativar.</span></div>':'')+
+      (lixTab?'<div class="al" style="margin-bottom:12px;background:var(--erl);border-color:var(--er)"><i class="ti ti-alert-triangle" style="color:var(--er)"></i><span style="font-size:12px">Itens na Lixeira são <strong>excluídos permanentemente após '+TRASH_DAYS+' dias</strong>. Use <strong>Restaurar</strong> para recuperar antes disso.</span></div>':'')+
       '<div id="bulkBar" style="display:none" class="bulk-bar">'+
         '<span class="bulk-info" id="bulkInfo">0 selecionados</span>'+
         '<button class="btn btn-o btn-s" onclick="clearBulk()"><i class="ti ti-x"></i>Cancelar</button>'+
@@ -2676,6 +2693,7 @@ async function goToDoc(docId, navId, parentLabel, subLabel){
   // Navigate to correct module
   curPastaId = null; curPastaNome = '';
   window._docsObsTab = false;
+  window._docsTab = 'ativos';
 
   if(subLabel && subLabel !== parentLabel){
     navigate(navId, parentLabel, subLabel);
@@ -2792,7 +2810,7 @@ async function exportPDF(targetFilial){
     const filialLabel = targetFilial==='todas'?'Todas as Filiais':targetFilial;
 
     // Fetch documents
-    let qD = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).order('modulo').order('nome');
+    let qD = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).is('excluido_em',null).order('modulo').order('nome');
     if(targetFilial!=='todas') qD=qD.eq('filial',targetFilial);
     const {data:docsR}=await qD;
     const D=docsR||[];
@@ -3158,6 +3176,10 @@ document.getElementById('cnt').addEventListener('click', e => {
   if(t.closest('[data-obsdoc]')){ const b=t.closest('[data-obsdoc]'); marcarObsoletoDoc(b.dataset.obsdoc,b.dataset.delnome); return; }
   if(t.closest('[data-obsgroup]')){ toggleObsGroup(t.closest('[data-obsgroup]').dataset.obsgroup); return; }
   if(t.closest('[data-deldoc]')){ const b=t.closest('[data-deldoc]'); confirm2(`Excluir DEFINITIVAMENTE "${b.dataset.delnome}"? Esta ação não pode ser desfeita.`,()=>delDoc(b.dataset.deldoc)); return; }
+  if(t.closest('[data-doctab]')){ window._docsTab=t.closest('[data-doctab]').dataset.doctab; render(); return; }
+  if(t.closest('[data-trashdoc]')){ const b=t.closest('[data-trashdoc]'); moverParaLixeira(b.dataset.trashdoc,b.dataset.delnome); return; }
+  if(t.closest('[data-restlix]')){ restaurarDaLixeira(t.closest('[data-restlix]').dataset.restlix); return; }
+  if(t.closest('[data-purgedoc]')){ const b=t.closest('[data-purgedoc]'); excluirPermanente(b.dataset.purgedoc,b.dataset.delnome); return; }
   if(t.closest('[data-restoredoc]')){ restaurarDoc(t.closest('[data-restoredoc]').dataset.restoredoc); return; }
   if(t.closest('[data-chk]')){ toggleChk(t.closest('[data-chk]').dataset.chk); return; }
   if(t.closest('[data-edit]')){ editDoc(t.closest('[data-edit]').dataset.edit); return; }
@@ -3196,7 +3218,7 @@ let _mestraFilterStatus = 'all';
 async function renderListaMestra(){
   const c = document.getElementById('cnt');
   try {
-    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,versao,status,data_emissao').eq('obsoleto',false);
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,versao,status,data_emissao').eq('obsoleto',false).is('excluido_em',null);
     if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
     const { data: docs } = await query;
     const D = docs || [];
@@ -3380,7 +3402,7 @@ async function renderPendencias(){
   const c = document.getElementById('cnt');
   try {
     // Fetch docs (vencidos + próximos)
-    let docQ = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false);
+    let docQ = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).is('excluido_em',null);
     if(filialAtiva !== 'todas') docQ = docQ.eq('filial', filialAtiva);
     const { data: docs } = await docQ;
     const D = docs || [];
@@ -3515,7 +3537,7 @@ let _calYear = new Date().getFullYear();
 async function renderCalendario(){
   const c = document.getElementById('cnt');
   try {
-    let docQ = sb.from('documentos').select('nome,modulo,submodulo,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).not('data_validade','is',null).eq('val_indeterminada',false);
+    let docQ = sb.from('documentos').select('nome,modulo,submodulo,filial,data_validade,val_indeterminada,status').eq('obsoleto',false).is('excluido_em',null).not('data_validade','is',null).eq('val_indeterminada',false);
     if(filialAtiva !== 'todas') docQ = docQ.eq('filial', filialAtiva);
     const { data: docs } = await docQ;
     const D = docs || [];
@@ -3638,7 +3660,7 @@ async function exportDocsExcel(){
   showLoading('Gerando Excel...');
   try {
     const v = curV; const lbl = MMAP[v]||MMOD[v]||SMAP[v]||v;
-    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_emissao,data_validade,val_indeterminada,versao,status,tags,observacoes').eq('obsoleto',false);
+    let query = sb.from('documentos').select('nome,modulo,submodulo,responsavel,filial,data_emissao,data_validade,val_indeterminada,versao,status,tags,observacoes').eq('obsoleto',false).is('excluido_em',null);
     if(filialAtiva !== 'todas') query = query.eq('filial', filialAtiva);
     if(MMOD[v]) query = query.eq('modulo', MMOD[v]);
     else if(SMAP[v]) query = query.eq('submodulo', SMAP[v]);
@@ -3678,6 +3700,74 @@ async function exportDocsExcel(){
     toast('Erro ao gerar Excel: '+e.message,'d');
     console.error('exportDocsExcel:', e);
   }
+}
+
+// ============================================================
+// LIXEIRA (Soft Delete com retenção de 7 dias)
+// ============================================================
+const TRASH_DAYS = 7;
+
+// Lazy cleanup: apaga definitivamente itens na lixeira há mais de 7 dias
+let _lastPurge = {};
+async function purgeOldTrash(table){
+  try {
+    // Evita rodar a mesma limpeza várias vezes na mesma sessão (cache 5min)
+    const now = Date.now();
+    if(_lastPurge[table] && (now - _lastPurge[table]) < 300000) return;
+    _lastPurge[table] = now;
+    const cutoff = new Date(now - TRASH_DAYS*86400000).toISOString();
+    // Busca itens vencidos para logar antes de apagar
+    const { data: expired } = await sb.from(table).select('id,nome').not('excluido_em','is',null).lte('excluido_em',cutoff);
+    if(expired && expired.length){
+      await sb.from(table).delete().not('excluido_em','is',null).lte('excluido_em',cutoff);
+      for(const it of expired){
+        logActivity('excluir_permanente', table, it.id, '', 'Exclusão automática da lixeira (>'+TRASH_DAYS+' dias): '+(it.nome||it.id));
+      }
+    }
+  } catch(e){ console.warn('purgeOldTrash error (ignorado):', e); }
+}
+
+// Mover documento para a lixeira (soft delete)
+function moverParaLixeira(id, nome){
+  confirm2('O documento "'+nome+'" será movido para a Lixeira. Ele será excluído permanentemente após '+TRASH_DAYS+' dias, mas pode ser restaurado a qualquer momento antes disso.', async()=>{
+    showLoading('Movendo para a lixeira...');
+    try {
+      const { data:{session} } = await sb.auth.getSession();
+      const user = session?.user?.email || 'usuário';
+      await sb.from('documentos').update({ excluido_em: new Date().toISOString(), excluido_por: user }).eq('id', id);
+      logActivity('mover_lixeira','Documentos',id,'','Movido para Lixeira: '+nome);
+      hideLoading();
+      toast('Movido para a Lixeira','s');
+      render();
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  }, { title:'Mover para Lixeira', titleColor:'var(--er)', icon:'ti-trash', btnLabel:'Mover para Lixeira', btnColor:'var(--er)' });
+}
+
+// Restaurar documento da lixeira (volta para obsoletos, de onde veio)
+async function restaurarDaLixeira(id){
+  showLoading('Restaurando...');
+  try {
+    const { data: doc } = await sb.from('documentos').select('nome').eq('id',id).single();
+    await sb.from('documentos').update({ excluido_em: null, excluido_por: null }).eq('id', id);
+    logActivity('restaurar_lixeira','Documentos',id,'','Restaurado da Lixeira: '+(doc?.nome||id));
+    hideLoading();
+    toast('Documento restaurado','s');
+    render();
+  } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+}
+
+// Excluir permanentemente AGORA (da lixeira, sem esperar 7 dias)
+function excluirPermanente(id, nome){
+  confirm2('Excluir PERMANENTEMENTE "'+nome+'"? Esta ação é irreversível e o documento será apagado imediatamente.', async()=>{
+    showLoading('Excluindo...');
+    try {
+      await sb.from('documentos').delete().eq('id', id);
+      logActivity('excluir_permanente','Documentos',id,'','Exclusão permanente manual: '+nome);
+      hideLoading();
+      toast('Documento excluído permanentemente','s');
+      render();
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  }, { title:'Excluir Permanentemente', titleColor:'var(--er)', icon:'ti-trash-x', btnLabel:'Excluir de vez', btnColor:'var(--er)' });
 }
 
 // ============================================================
