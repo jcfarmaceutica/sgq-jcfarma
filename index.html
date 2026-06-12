@@ -246,16 +246,16 @@ textarea.fi{resize:vertical;min-height:70px}
 
 /* FILIAL SELECTOR */
 #filialPage{position:fixed;inset:0;background:var(--p);display:flex;align-items:center;justify-content:center;z-index:998}
-.filial-box{background:var(--sur);border-radius:16px;padding:40px;width:520px;max-width:95%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.filial-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
-.filial-card{border:2px solid var(--bd);border-radius:12px;padding:18px 14px;cursor:pointer;transition:all .2s;text-align:center}
+.filial-box{background:var(--sur);border-radius:14px;padding:28px 26px;width:560px;max-width:95%;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+.filial-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.filial-card{border:1.5px solid var(--bd);border-radius:10px;padding:13px 8px;cursor:pointer;transition:all .15s;text-align:center}
 .filial-card:hover{border-color:var(--l);background:var(--lxl);transform:translateY(-2px)}
 .filial-card.selected{border-color:var(--l);background:var(--lxl)}
 .filial-card.matriz{border-color:var(--p);background:var(--pxl)}
 .filial-card.matriz:hover{border-color:var(--pl);background:#d5eaf3}
-.fc-ico{font-size:28px;color:var(--p);margin-bottom:8px}
-.fc-nome{font-size:13px;font-weight:700;color:var(--p);font-family:'Nunito',sans-serif}
-.fc-cod{font-size:11px;color:var(--t3);margin-top:3px}
+.fc-ico{font-size:21px;color:var(--p);margin-bottom:5px}
+.fc-nome{font-size:12px;font-weight:700;color:var(--p);font-family:'Nunito',sans-serif;line-height:1.2}
+.fc-cod{font-size:10px;color:var(--t3);margin-top:2px}
 /* FILIAL BADGE in topbar */
 .filial-badge{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--pxl);border:1px solid var(--bd2);border-radius:20px;font-size:12px;font-weight:700;color:var(--p);cursor:pointer;flex-shrink:0;transition:all .15s}
 .filial-badge:hover{background:#d5eaf3}
@@ -371,10 +371,10 @@ tr.selected td{background:#EBF4F7 !important}
 <!-- FILIAL SELECTOR PAGE -->
 <div id="filialPage" style="display:none">
   <div class="filial-box">
-    <div style="text-align:center;margin-bottom:16px"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="height:56px;width:auto;max-width:260px;object-fit:contain" /></div>
+    <div style="text-align:center;margin-bottom:10px"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="height:44px;width:auto;max-width:220px;object-fit:contain" /></div>
     <p style="text-align:center;font-size:12.5px;color:var(--t3);margin-bottom:4px">Bem-vindo(a)! Escolha a unidade para acessar:</p>
     <div class="filial-grid" id="filialGrid"></div>
-    <div style="margin-top:20px;text-align:center">
+    <div style="margin-top:16px;text-align:center">
       <button class="btn btn-o" onclick="doLogout()" style="font-size:12px"><i class="ti ti-logout"></i>Sair</button>
     </div>
   </div>
