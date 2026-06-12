@@ -1901,7 +1901,7 @@ async function renderDash(){
       '<tbody id="dDBody">'+D.slice(0,8).map(d=>'<tr data-st="'+d.status+'">'+
         '<td><div style="font-weight:600">'+esc(d.nome)+'</div>'+
           '<div style="margin-top:3px">'+(d.tags||'').split(',').filter(Boolean).slice(0,3).map(t=>'<span class="chip l">'+esc(t.trim())+'</span>').join('')+'</div>'+
-          (lixTab&&d.excluido_em?(function(){ var diasRest=TRASH_DAYS-Math.floor((Date.now()-new Date(d.excluido_em).getTime())/86400000); var cor=diasRest<=2?'var(--er)':'var(--wn)'; return '<div style="font-size:10.5px;color:'+cor+';margin-top:3px;font-weight:700"><i class="ti ti-clock-x" style="font-size:10px"></i> Exclusão em '+Math.max(0,diasRest)+' dia(s)'+(d.excluido_por?' · removido por '+esc(d.excluido_por):'')+'</div>'; })():'')+'</td>'+
+          '</td>'+
         (filialAtiva==='todas'?'<td><span style="font-size:11px;font-weight:600;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:2px 7px;border-radius:20px">'+esc(d.filial||'—')+'</span></td>':'')+
         '<td style="color:var(--t2)">'+esc(d.modulo)+'</td>'+
         '<td style="color:var(--t2)">'+esc(d.responsavel)+'</td>'+
