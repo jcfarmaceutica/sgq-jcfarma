@@ -2084,7 +2084,8 @@ async function renderDocs(){
           ?'<div class="bic edt" data-restoredoc="'+d.id+'" title="Restaurar"><i class="ti ti-refresh"></i></div>'+
            '<div class="bic del" data-trashdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>'
           :'<div class="bic edt" data-edit="'+d.id+'" title="Editar"><i class="ti ti-edit"></i></div>'+
-           '<div class="bic del" data-obsdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>')+
+           '<div class="bic del" data-obsdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>'+
+           '<div class="bic del" data-trashdoc="'+d.id+'" data-delnome="'+esc(d.nome)+'" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>')+
       '</div></td></tr>';
   });
   }
