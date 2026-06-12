@@ -971,6 +971,7 @@ async function buildNotifs(){
   let treinQ = sb.from('treinamentos')
     .select('id,nome,data_realizacao,avaliacao_eficacia,filial')
     .eq('obsoleto', false)
+    .is('excluido_em', null)
     .eq('avaliacao_eficacia', false)
     .not('data_realizacao', 'is', null)
     .lte('data_realizacao', limite90.toISOString().split('T')[0]);
@@ -991,6 +992,7 @@ async function buildNotifs(){
   let treinApprQ = sb.from('treinamentos')
     .select('id,nome,data_realizacao,avaliacao_eficacia,filial')
     .eq('obsoleto', false)
+    .is('excluido_em', null)
     .eq('avaliacao_eficacia', false)
     .not('data_realizacao', 'is', null)
     .gte('data_realizacao', limite90.toISOString().split('T')[0])
@@ -1012,7 +1014,7 @@ async function buildNotifs(){
   // Audit due alerts
   let auditAlerts2 = [];
   try {
-    let audQ2 = sb.from('auditorias').select('id,tipo_auditoria,proxima_auditoria,filial').not('proxima_auditoria','is',null);
+    let audQ2 = sb.from('auditorias').select('id,tipo_auditoria,proxima_auditoria,filial').is('excluido_em',null).not('proxima_auditoria','is',null);
     if(filialAtiva !== 'todas') audQ2 = audQ2.eq('filial',filialAtiva);
     const {data:proximasAud} = await audQ2;
     const hj = new Date(); hj.setHours(0,0,0,0);
@@ -1320,16 +1322,22 @@ async function doSearch(val){
 }
 async function renderTrein(tabObs){
   try {
-  if(tabObs===undefined) tabObs = window._treinObsTab||false;
-  window._treinObsTab = tabObs;
-  let qA = sb.from('treinamentos').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
-  let qO = sb.from('treinamentos').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
+  await purgeOldTrash('treinamentos');
+  // tabObs can be: false (ativos), true (obsoletos), or 'lixeira'
+  if(tabObs===undefined) tabObs = window._treinTab||false;
+  window._treinTab = tabObs;
+  const treinTab = tabObs==='lixeira' ? 'lixeira' : (tabObs ? 'obsoletos' : 'ativos');
+  const lixTabT = treinTab==='lixeira';
+  let qA = sb.from('treinamentos').select('*').eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false});
+  let qO = sb.from('treinamentos').select('*').eq('obsoleto',true).is('excluido_em',null).order('obsoleto_em',{ascending:false});
+  let qL = sb.from('treinamentos').select('*').not('excluido_em','is',null).order('excluido_em',{ascending:false});
   if(filialAtiva !== 'todas'){
-    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva);
+    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); qL=qL.eq('filial',filialAtiva);
   }
-  const [{ data:TA },{ data:TO }] = await Promise.all([qA, qO]);
-  const ativos=TA||[], obs=TO||[];
-  const tr = tabObs ? obs : ativos;
+  const [{ data:TA },{ data:TO },{ data:TL }] = await Promise.all([qA, qO, qL]);
+  const ativos=TA||[], obs=TO||[], lixo=TL||[];
+  const tr = lixTabT ? lixo : (tabObs ? obs : ativos);
+  const tabObsB = tabObs===true;
 
   function eficBadge(t){
     if(!t.avaliacao_eficacia) return '<span class="efic-badge p"><i class="ti ti-clock"></i> Pendente</span>';
@@ -1365,10 +1373,15 @@ async function renderTrein(tabObs){
       <td>${stB(t.status)}</td>
       <td>${eficBadge(t)}</td>
       <td><div style="display:flex;gap:3px">
-        ${tabObs
-          ? `<div class="bic edt" data-restoretrein="${t.id}" title="Restaurar"><i class="ti ti-refresh"></i></div>`
+        ${lixTabT
+          ? `<div class="bic edt" data-restlixtrein="${t.id}" title="Restaurar da Lixeira"><i class="ti ti-arrow-back-up"></i></div>
+             <div class="bic del" data-purgetrein="${t.id}" data-delnome="${esc(t.nome)}" title="Excluir permanentemente agora"><i class="ti ti-trash-x"></i></div>`
+          : tabObsB
+          ? `<div class="bic edt" data-restoretrein="${t.id}" title="Restaurar"><i class="ti ti-refresh"></i></div>
+             <div class="bic del" data-trashtrein="${t.id}" data-delnome="${esc(t.nome)}" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>`
           : `<div class="bic edt" data-edittrein="${t.id}"><i class="ti ti-edit"></i></div>
-             <div class="bic del" data-obstrein="${t.id}" data-delnome="${esc(t.nome)}" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>`
+             <div class="bic del" data-obstrein="${t.id}" data-delnome="${esc(t.nome)}" title="Mover para Obsoletos"><i class="ti ti-archive"></i></div>
+             <div class="bic del" data-trashtrein="${t.id}" data-delnome="${esc(t.nome)}" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>`
         }
       </div></td>
     </tr>`;
@@ -1386,8 +1399,9 @@ async function renderTrein(tabObs){
   <div class="kpi r"><div class="kl">Vencidos</div><div class="kv d">${ativos.filter(t=>t.status==='x').length}</div></div>
 </div>
 <div class="tab-bar">
-  <div class="tab-btn ${!tabObs?'act':''}" onclick="renderTrein(false)"><i class="ti ti-school"></i>Ativos <span class="cnt-badge">${ativos.length}</span></div>
-  <div class="tab-btn obs-tab ${tabObs?'act':''}" onclick="renderTrein(true)"><i class="ti ti-archive"></i>Obsoletos <span class="cnt-badge">${obs.length}</span></div>
+  <div class="tab-btn ${treinTab==='ativos'?'act':''}" onclick="renderTrein(false)"><i class="ti ti-school"></i>Ativos <span class="cnt-badge">${ativos.length}</span></div>
+  <div class="tab-btn obs-tab ${treinTab==='obsoletos'?'act':''}" onclick="renderTrein(true)"><i class="ti ti-archive"></i>Obsoletos <span class="cnt-badge">${obs.length}</span></div>
+  <div class="tab-btn lix-tab ${treinTab==='lixeira'?'act':''}" onclick="renderTrein('lixeira')"><i class="ti ti-trash"></i>Lixeira <span class="cnt-badge">${lixo.length}</span></div>
 </div>
 <div class="card">
   <div class="sh2"><div class="st-title" style="margin:0"><i class="ti ti-school"></i>${tabObs?'Treinamentos Obsoletos':'Registro de Treinamentos'}</div></div>
@@ -1506,15 +1520,20 @@ async function delTrein(id){ showLoading('Excluindo...'); await sb.from('treinam
 // ============================================================
 async function renderAudit(){
   try {
-  const obsTab = window._audObsTab||false;
-  let qA = sb.from('auditorias').select('*').eq('obsoleto',false).order('criado_em',{ascending:false});
-  let qO = sb.from('auditorias').select('*').eq('obsoleto',true).order('obsoleto_em',{ascending:false});
+  await purgeOldTrash('auditorias');
+  const audTabRaw = window._audObsTab||false;
+  const audTab = audTabRaw==='lixeira' ? 'lixeira' : (audTabRaw ? 'obsoletos' : 'ativos');
+  const obsTab = audTab==='obsoletos';
+  const lixTabA = audTab==='lixeira';
+  let qA = sb.from('auditorias').select('*').eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false});
+  let qO = sb.from('auditorias').select('*').eq('obsoleto',true).is('excluido_em',null).order('obsoleto_em',{ascending:false});
+  let qL = sb.from('auditorias').select('*').not('excluido_em','is',null).order('excluido_em',{ascending:false});
   if(filialAtiva !== 'todas'){
-    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva);
+    qA=qA.eq('filial',filialAtiva); qO=qO.eq('filial',filialAtiva); qL=qL.eq('filial',filialAtiva);
   }
-  const [{ data:AA },{ data:AO }] = await Promise.all([qA, qO]);
-  const ativos=AA||[], obs=AO||[];
-  const aud = obsTab ? obs : ativos;
+  const [{ data:AA },{ data:AO },{ data:AL }] = await Promise.all([qA, qO, qL]);
+  const ativos=AA||[], obs=AO||[], lixo=AL||[];
+  const aud = lixTabA ? lixo : (obsTab ? obs : ativos);
   let rows=''; let lastFilialAud='';
   aud.forEach(a=>{
     if(filialAtiva==='todas'&&a.filial&&a.filial!==lastFilialAud){
@@ -1531,10 +1550,15 @@ async function renderAudit(){
       <td>${fd(a.prazo)}</td>
       <td>${a.status==='em_andamento'?'<span class="st p"><span class="st-dot"></span>Em andamento</span>':'<span class="st v"><span class="st-dot"></span>Concluída</span>'}</td>
       <td><div style="display:flex;gap:3px">
-        ${obsTab
-          ? `<div class="bic edt" data-restoreaud="${a.id}" title="Restaurar"><i class="ti ti-refresh"></i></div>`
+        ${lixTabA
+          ? `<div class="bic edt" data-restlixaud="${a.id}" title="Restaurar da Lixeira"><i class="ti ti-arrow-back-up"></i></div>
+             <div class="bic del" data-purgeaud="${a.id}" data-delnome="Auditoria" title="Excluir permanentemente agora"><i class="ti ti-trash-x"></i></div>`
+          : obsTab
+          ? `<div class="bic edt" data-restoreaud="${a.id}" title="Restaurar"><i class="ti ti-refresh"></i></div>
+             <div class="bic del" data-trashaud="${a.id}" data-delnome="Auditoria" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>`
           : `<div class="bic edt" data-editaud="${a.id}"><i class="ti ti-edit"></i></div>
-             <div class="bic del" data-obsaud="${a.id}" title="Obsoleto"><i class="ti ti-archive"></i></div>`
+             <div class="bic del" data-obsaud="${a.id}" title="Obsoleto"><i class="ti ti-archive"></i></div>
+             <div class="bic del" data-trashaud="${a.id}" data-delnome="Auditoria" title="Mover para Lixeira"><i class="ti ti-trash"></i></div>`
         }
       </div></td>
     </tr>`;
@@ -1544,8 +1568,9 @@ async function renderAudit(){
 <div class="ph"><div class="ph-l"><div class="ph-bar"></div><div><div class="pt">Auditorias</div><div class="ps">Registro, não conformidades e planos de ação</div></div></div>${!obsTab?'<button class="btn btn-l" id="btnNAud"><i class="ti ti-plus"></i>Registrar Auditoria</button>':''}</div>
 <div class="sg3"><div class="kpi b"><div class="kl">Total Ativo</div><div class="kv">${ativos.length}</div><i class="ti ti-clipboard-check k-ico"></i></div><div class="kpi y"><div class="kl">Em Andamento</div><div class="kv w">${ativos.filter(a=>a.status==='em_andamento').length}</div></div><div class="kpi g"><div class="kl">Concluídas</div><div class="kv s">${ativos.filter(a=>a.status==='concluida').length}</div></div></div>
 <div class="tab-bar">
-  <div class="tab-btn ${!obsTab?'act':''}" onclick="window._audObsTab=false;render()"><i class="ti ti-clipboard-check"></i>Ativas <span class="cnt-badge">${ativos.length}</span></div>
-  <div class="tab-btn obs-tab ${obsTab?'act':''}" onclick="window._audObsTab=true;render()"><i class="ti ti-archive"></i>Obsoletas <span class="cnt-badge">${obs.length}</span></div>
+  <div class="tab-btn ${audTab==='ativos'?'act':''}" onclick="window._audObsTab=false;render()"><i class="ti ti-clipboard-check"></i>Ativas <span class="cnt-badge">${ativos.length}</span></div>
+  <div class="tab-btn obs-tab ${audTab==='obsoletos'?'act':''}" onclick="window._audObsTab=true;render()"><i class="ti ti-archive"></i>Obsoletas <span class="cnt-badge">${obs.length}</span></div>
+  <div class="tab-btn lix-tab ${audTab==='lixeira'?'act':''}" onclick="window._audObsTab='lixeira';render()"><i class="ti ti-trash"></i>Lixeira <span class="cnt-badge">${lixo.length}</span></div>
 </div>
 <div class="card">
   <div class="sh2"><div class="st-title" style="margin:0"><i class="ti ti-clipboard-check"></i>${obsTab?'Auditorias Obsoletas':'Histórico'}</div>
@@ -1744,8 +1769,8 @@ async function renderDash(){
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
     filQ(sb.from('documentos').select('*')).eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false}),
-    filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false),
-    filQ(sb.from('auditorias').select('id,status,data_validade')),
+    filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false).is('excluido_em',null),
+    filQ(sb.from('auditorias').select('id,status,data_validade')).is('excluido_em',null),
     filQ(popsRevQ),
   ]);
   const D=docs||[],T=trein||[],A=aud||[];
@@ -2823,13 +2848,13 @@ async function exportPDF(targetFilial){
     const pct=D.length?Math.round(vigs/D.length*100):0;
 
     // Fetch treinamentos
-    let qT2 = sb.from('treinamentos').select('nome,tipo,filial,data_realizacao,avaliacao_eficacia').eq('obsoleto',false).order('nome');
+    let qT2 = sb.from('treinamentos').select('nome,tipo,filial,data_realizacao,avaliacao_eficacia').eq('obsoleto',false).is('excluido_em',null).order('nome');
     if(targetFilial!=='todas') qT2=qT2.eq('filial',targetFilial);
     const {data:treinsR}=await qT2;
     const TR=treinsR||[];
 
     // Fetch auditorias
-    let qA2 = sb.from('auditorias').select('nome,tipo_auditoria,filial,data_auditoria,resultado').order('data_auditoria',{ascending:false});
+    let qA2 = sb.from('auditorias').select('nome,tipo_auditoria,filial,data_auditoria,resultado').is('excluido_em',null).order('data_auditoria',{ascending:false});
     if(targetFilial!=='todas') qA2=qA2.eq('filial',targetFilial);
     const {data:auditsR}=await qA2;
     const AR=auditsR||[];
@@ -3189,11 +3214,17 @@ document.getElementById('cnt').addEventListener('click', e => {
   if(t.closest('[data-delf]')){ const id=t.closest('[data-delf]').dataset.delf; confirm2('Remover este arquivo?',()=>delFile(id)); return; }
   if(t.closest('[data-upload]')){ uploadToDoc(t.closest('[data-upload]').dataset.upload); return; }
   if(t.closest('#btnNDoc')||t.closest('#btnNDoc2')){ newDoc(); return; }
+  if(t.closest('[data-trashtrein]')){ const b=t.closest('[data-trashtrein]'); moverParaLixeiraTrein(b.dataset.trashtrein,b.dataset.delnome); return; }
+  if(t.closest('[data-restlixtrein]')){ restaurarDaLixeiraTrein(t.closest('[data-restlixtrein]').dataset.restlixtrein); return; }
+  if(t.closest('[data-purgetrein]')){ const b=t.closest('[data-purgetrein]'); excluirPermanenteTrein(b.dataset.purgetrein,b.dataset.delnome); return; }
   if(t.closest('[data-obstrein]')){ const b=t.closest('[data-obstrein]'); marcarObsoletoTrein(b.dataset.obstrein,b.dataset.delnome); return; }
   if(t.closest('[data-restoretrein]')){ restaurarTrein(t.closest('[data-restoretrein]').dataset.restoretrein); return; }
   if(t.closest('[data-edittrein]')){ editTrein(t.closest('[data-edittrein]').dataset.edittrein); return; }
   if(t.closest('[data-deltrein]')){ const b=t.closest('[data-deltrein]'); confirm2(`Excluir "${b.dataset.delnome}"?`,()=>delTrein(b.dataset.deltrein)); return; }
   if(t.closest('#btnNTrein')||t.closest('#btnNTrein2')){ newTrein(); return; }
+  if(t.closest('[data-trashaud]')){ moverParaLixeiraAud(t.closest('[data-trashaud]').dataset.trashaud); return; }
+  if(t.closest('[data-restlixaud]')){ restaurarDaLixeiraAud(t.closest('[data-restlixaud]').dataset.restlixaud); return; }
+  if(t.closest('[data-purgeaud]')){ excluirPermanenteAud(t.closest('[data-purgeaud]').dataset.purgeaud); return; }
   if(t.closest('[data-obsaud]')){ marcarObsAudit(t.closest('[data-obsaud]').dataset.obsaud); return; }
   if(t.closest('[data-restoreaud]')){ restaurarAudit(t.closest('[data-restoreaud]').dataset.restoreaud); return; }
   if(t.closest('[data-editaud]')){ editAudit(t.closest('[data-editaud]').dataset.editaud); return; }
@@ -3410,7 +3441,7 @@ async function renderPendencias(){
     D.forEach(d=>{ d._ls = d.data_validade && !d.val_indeterminada ? calcStat(d.data_validade) : (d.val_indeterminada?'v':d.status); });
 
     // Fetch treinamentos pending eficacia
-    let trQ = sb.from('treinamentos').select('nome,responsavel,filial,data_realizacao,avaliacao_eficacia,obsoleto').eq('obsoleto',false);
+    let trQ = sb.from('treinamentos').select('nome,responsavel,filial,data_realizacao,avaliacao_eficacia,obsoleto').eq('obsoleto',false).is('excluido_em',null);
     if(filialAtiva !== 'todas') trQ = trQ.eq('filial', filialAtiva);
     const { data: treins } = await trQ;
     const T = treins || [];
@@ -3769,6 +3800,91 @@ function excluirPermanente(id, nome){
       render();
     } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
   }, { title:'Excluir Permanentemente', titleColor:'var(--er)', icon:'ti-trash-x', btnLabel:'Excluir de vez', btnColor:'var(--er)' });
+}
+
+// ============================================================
+// LIXEIRA — TREINAMENTOS
+// ============================================================
+function moverParaLixeiraTrein(id, nome){
+  confirm2('O treinamento "'+nome+'" será movido para a Lixeira. Será excluído permanentemente após '+TRASH_DAYS+' dias, mas pode ser restaurado a qualquer momento antes disso.', async()=>{
+    showLoading('Movendo para a lixeira...');
+    try {
+      const { data:{session} } = await sb.auth.getSession();
+      const user = session?.user?.email || 'usuário';
+      await sb.from('treinamentos').update({ excluido_em: new Date().toISOString(), excluido_por: user }).eq('id', id);
+      logActivity('mover_lixeira','Treinamentos',id,'','Movido para Lixeira: '+nome);
+      hideLoading();
+      toast('Movido para a Lixeira','s');
+      renderTrein(window._treinTab);
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  }, {title:'Mover para Lixeira', titleColor:'var(--er)', icon:'ti-trash', btnLabel:'Mover para Lixeira', btnColor:'var(--er)'});
+}
+
+async function restaurarDaLixeiraTrein(id){
+  showLoading('Restaurando...');
+  try {
+    const { data: t } = await sb.from('treinamentos').select('nome').eq('id',id).single();
+    await sb.from('treinamentos').update({ excluido_em: null, excluido_por: null }).eq('id', id);
+    logActivity('restaurar_lixeira','Treinamentos',id,'','Restaurado da Lixeira: '+(t?.nome||id));
+    hideLoading();
+    toast('Treinamento restaurado','s');
+    renderTrein(window._treinTab);
+  } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+}
+
+function excluirPermanenteTrein(id, nome){
+  confirm2('Excluir PERMANENTEMENTE "'+nome+'"? Esta ação é irreversível e o treinamento será apagado imediatamente.', async()=>{
+    showLoading('Excluindo...');
+    try {
+      await sb.from('treinamentos').delete().eq('id', id);
+      logActivity('excluir_permanente','Treinamentos',id,'','Exclusão permanente manual: '+nome);
+      hideLoading();
+      toast('Treinamento excluído permanentemente','s');
+      renderTrein(window._treinTab);
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  });
+}
+
+// ============================================================
+// LIXEIRA — AUDITORIAS
+// ============================================================
+function moverParaLixeiraAud(id, nome){
+  confirm2('Esta auditoria será movida para a Lixeira. Será excluída permanentemente após '+TRASH_DAYS+' dias, mas pode ser restaurada a qualquer momento antes disso.', async()=>{
+    showLoading('Movendo para a lixeira...');
+    try {
+      const { data:{session} } = await sb.auth.getSession();
+      const user = session?.user?.email || 'usuário';
+      await sb.from('auditorias').update({ excluido_em: new Date().toISOString(), excluido_por: user }).eq('id', id);
+      logActivity('mover_lixeira','Auditorias',id,'','Auditoria movida para Lixeira');
+      hideLoading();
+      toast('Movido para a Lixeira','s');
+      render();
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  }, {title:'Mover para Lixeira', titleColor:'var(--er)', icon:'ti-trash', btnLabel:'Mover para Lixeira', btnColor:'var(--er)'});
+}
+
+async function restaurarDaLixeiraAud(id){
+  showLoading('Restaurando...');
+  try {
+    await sb.from('auditorias').update({ excluido_em: null, excluido_por: null }).eq('id', id);
+    logActivity('restaurar_lixeira','Auditorias',id,'','Auditoria restaurada da Lixeira');
+    hideLoading();
+    toast('Auditoria restaurada','s');
+    render();
+  } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+}
+
+function excluirPermanenteAud(id){
+  confirm2('Excluir PERMANENTEMENTE esta auditoria? Esta ação é irreversível e será apagada imediatamente.', async()=>{
+    showLoading('Excluindo...');
+    try {
+      await sb.from('auditorias').delete().eq('id', id);
+      logActivity('excluir_permanente','Auditorias',id,'','Exclusão permanente manual de auditoria');
+      hideLoading();
+      toast('Auditoria excluída permanentemente','s');
+      render();
+    } catch(e){ hideLoading(); toast('Erro: '+e.message,'d'); }
+  });
 }
 
 // ============================================================
