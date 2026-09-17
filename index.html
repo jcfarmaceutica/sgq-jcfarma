@@ -1835,7 +1835,7 @@ async function renderDash(){
   const kpiEfic=ep>0?'<div class="kpi" style="border-color:#CE93D8"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#9C27B0;border-radius:2px 2px 0 0"></div><div class="kl" style="color:#7B1FA2">Aval. Eficácia Pend.</div><div class="kv" style="color:#7B1FA2">'+ep+'</div><div class="ks">Treinamentos aguardando</div><i class="ti ti-clipboard-check k-ico" style="color:#CE93D8"></i></div>':'';
 
   // Alerts section — separado em: Documentos da Empresa x Qualificação de Fornecedores/Serviços
-  const MODULOS_QUALIF=['Serviços','Qualificações'];
+  const MODULOS_QUALIF=['Qualificações'];
   const hoje4=new Date();
   const popRevItems=(popsReview||[]).slice(0,2).map(d=>{
     const dl=dLeft(d.data_validade);
@@ -1931,7 +1931,7 @@ async function renderDash(){
     '</div>'+
     '<div class="sg">'+
       '<div class="card"><div class="st-title"><i class="ti ti-building" style="color:var(--er)"></i>Alertas — Documentos da Empresa</div>'+alertsEmpresaHtml+'</div>'+
-      '<div class="card"><div class="st-title"><i class="ti ti-building-store" style="color:var(--in)"></i>Alertas — Qualif. Fornecedores/Serviços</div>'+alertsQualifHtml+'</div>'+
+      '<div class="card"><div class="st-title"><i class="ti ti-building-store" style="color:var(--in)"></i>Alertas — Qualif./Validações</div>'+alertsQualifHtml+'</div>'+
     '</div>'+
     '<div class="card">'+
       '<div class="st-title"><i class="ti ti-shield-check"></i>Índice de Conformidade</div>'+
