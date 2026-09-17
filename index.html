@@ -417,8 +417,8 @@ tr.selected td{background:#EBF4F7 !important}
 <div class="np" id="np">
   <div class="np-h">
     <span><i class="ti ti-bell-ringing" style="color:var(--y);margin-right:6px"></i>Alertas</span>
-    <div style="display:flex;gap:10px;align-items:center"><span style="font-size:11px;font-weight:600;color:var(--l);cursor:pointer" onclick="markAllRead()">Marcar lidas</span><span style="font-size:11px;font-weight:600;color:var(--er);cursor:pointer" onclick="clearAllNotifs()"><i class="ti ti-trash" style="font-size:11px"></i> Limpar</span></div>
   </div>
+  <div style="padding:7px 14px;font-size:10.5px;color:var(--t3);background:var(--bg);border-bottom:1px solid var(--bd)">Alertas automáticos — somem quando o registro correspondente for atualizado</div>
   <div id="npList"></div>
 </div>
 
@@ -574,25 +574,6 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 // ============================================================
 // AUTH — LOGIN / LOGOUT
 // ============================================================
-async function forgotPassword(){
-  const email = document.getElementById('loginEmail').value.trim();
-  const err = document.getElementById('loginErr');
-  if(!email){ err.textContent='Digite seu e-mail acima primeiro.'; err.style.display='block'; return; }
-  const btn = document.getElementById('btnForgot');
-  btn.textContent = 'Enviando...'; btn.disabled = true;
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.href
-  });
-  btn.textContent = 'Esqueci minha senha'; btn.disabled = false;
-  if(error){
-    err.textContent = 'Erro ao enviar. Verifique o e-mail digitado.';
-    err.style.display = 'block';
-  } else {
-    document.getElementById('resetMsg').style.display = 'block';
-    err.style.display = 'none';
-  }
-}
-
 
 async function showForgotPwd(){
   const box = document.getElementById('loginForgotBox');
@@ -692,7 +673,7 @@ function showFilialSelector(){
     <div class="fc-cod">Visão consolidada</div>
   </div>`;
   FILIAIS.forEach(f => {
-    const ico = f.nome === 'Matriz' ? 'ti-building-skyscraper' : 'ti-building-store';
+    const ico = f.nome === 'GO' ? 'ti-building-skyscraper' : 'ti-building-store';
     cards += `<div class="filial-card" onclick="selectFilial('${f.nome}')">
       <div class="fc-ico"><i class="ti ${ico}"></i></div>
       <div class="fc-nome">${esc(f.nome)}</div>
@@ -749,7 +730,7 @@ async function doLogout(){
   document.getElementById('filialPage').style.display='none';
   document.getElementById('loginPage').style.display='flex';
   document.getElementById('loginPass').value='';
-  filialAtiva = 'Matriz';
+  filialAtiva = 'GO';
   toast('Sessão encerrada.','s');
 }
 
@@ -758,7 +739,7 @@ async function doLogout(){
 // ============================================================
 let CFG = { empresa:'JC Farmacêutica', subtitulo:'SGQ · GESTÃO DA QUALIDADE', user_nome:'', user_cargo:'', user_iniciais:'', alert_dias:30, notif_sistema:true, notif_email:false, filial_acesso:'todas' };
 let FILIAIS = [];
-let filialAtiva = 'Matriz'; // filial currently being viewed
+let filialAtiva = 'GO'; // filial currently being viewed
 let isMatriz = false; // true if user has access to all filiais
 let cfgId = null;
 
@@ -857,7 +838,7 @@ function buildNav(){
     const isAct=curV===item.id||(item.sub&&item.sub.some(s=>s.id===curV));
     const isOpen=openNav[item.id];
     const w=document.createElement('div');
-    const subHtml=item.sub&&isOpen?'<div class="sni-wrap">'+item.sub.map(s=>`<div class="sni ${curV===s.id?'act':''}" data-id="${s.id}" data-parent="${item.lbl}" data-label="${s.lbl}"><i class="ti ti-point" style="font-size:10px"></i>${s.lbl}</div>`).join('')+'</div>':'';
+    const subHtml=item.sub&&isOpen?'<div class="sni-wrap">'+item.sub.filter(s=>opSubAvail(s.id)).map(s=>`<div class="sni ${curV===s.id?'act':''}" data-id="${s.id}" data-parent="${item.lbl}" data-label="${s.lbl}"><i class="ti ti-point" style="font-size:10px"></i>${s.lbl}</div>`).join('')+'</div>':'';
     w.innerHTML=`<div class="ni ${isAct?'act':''} ${isOpen?'open':''}" data-id="${item.id}" data-hassub="${item.sub?'1':'0'}" title="${item.lbl}"><i class="ti ${item.ico} ico"></i><span class="lbl">${item.lbl}</span>${item.sub?'<i class="ti ti-chevron-right arr"></i>':''}</div>${subHtml}`;
     c.appendChild(w);
   });
@@ -1202,7 +1183,7 @@ function newDoc(){
     if(dFilial) dFilial.innerHTML=FILIAIS.map(f=>'<option value="'+esc(f.nome)+'">'+esc(f.nome)+'</option>').join('');
   } else {
     if(fgFilial) fgFilial.style.display='none';
-    if(dFilial) dFilial.innerHTML='<option value="'+(filialAtiva==='todas'?'Matriz':filialAtiva)+'">'+(filialAtiva==='todas'?'Matriz':filialAtiva)+'</option>';
+    if(dFilial) dFilial.innerHTML='<option value="'+(filialAtiva==='todas'?'GO':filialAtiva)+'">'+(filialAtiva==='todas'?'GO':filialAtiva)+'</option>';
   }
   openModal('mDoc');
 }
@@ -1853,7 +1834,8 @@ async function renderDash(){
   const ep=(T||[]).filter(t=>!t.avaliacao_eficacia&&t.data_realizacao&&new Date(t.data_realizacao)<=l90).length;
   const kpiEfic=ep>0?'<div class="kpi" style="border-color:#CE93D8"><div style="position:absolute;top:0;left:0;right:0;height:3px;background:#9C27B0;border-radius:2px 2px 0 0"></div><div class="kl" style="color:#7B1FA2">Aval. Eficácia Pend.</div><div class="kv" style="color:#7B1FA2">'+ep+'</div><div class="ks">Treinamentos aguardando</div><i class="ti ti-clipboard-check k-ico" style="color:#CE93D8"></i></div>':'';
 
-  // Alerts section
+  // Alerts section — separado em: Documentos da Empresa x Qualificação de Fornecedores/Serviços
+  const MODULOS_QUALIF=['Serviços','Qualificações'];
   const hoje4=new Date();
   const popRevItems=(popsReview||[]).slice(0,2).map(d=>{
     const dl=dLeft(d.data_validade);
@@ -1869,21 +1851,51 @@ async function renderDash(){
     '<div style="flex:1"><div class="tl-t">📋 Avaliação de Eficácia — '+esc(t.nome)+'</div>'+
     '<div class="tl-m">Realizado em '+fd(t.data_realizacao)+' · Avaliação pendente</div></div>'+
     '<span class="st p"><span class="st-dot"></span>Pendente</span></div>').join('');
-  const docItems=alDocs.slice(0,5).map(d=>{
+  // Pastas (fornecedor/POP) — nome, filial dona e compartilhamento
+  const {data:todasPastas}=await sb.from('qualif_pastas').select('id,nome,filial,filiais_compartilhadas');
+  const pastaNomeMap={},pastaFilialMap={};
+  (todasPastas||[]).forEach(p=>{ pastaNomeMap[p.id]=p.nome; pastaFilialMap[p.id]=p.filial; });
+
+  // Documentos de pastas compartilhadas com esta filial — alerta informativo, NÃO conta na conformidade da filial
+  let alDocsCompartilhados=[];
+  if(filialAtiva!=='todas'){
+    const pastaIdsCompart=(todasPastas||[]).filter(p=>(p.filiais_compartilhadas||[]).includes(filialAtiva)).map(p=>p.id);
+    if(pastaIdsCompart.length){
+      const {data:docsCompart}=await sb.from('documentos').select('*').in('pasta_id',pastaIdsCompart).eq('obsoleto',false).is('excluido_em',null);
+      (docsCompart||[]).forEach(d=>{ d._liveStatus=d.data_validade&&!d.val_indeterminada?calcStat(d.data_validade):d.status; d._compartilhado=true; });
+      alDocsCompartilhados=(docsCompart||[]).filter(d=>d._liveStatus!=='v');
+    }
+  }
+  const alDocsQualif=alDocs.filter(d=>MODULOS_QUALIF.includes(d.modulo)).concat(alDocsCompartilhados.filter(d=>MODULOS_QUALIF.includes(d.modulo)));
+  const alDocsEmpresa=alDocs.filter(d=>!MODULOS_QUALIF.includes(d.modulo)).concat(alDocsCompartilhados.filter(d=>!MODULOS_QUALIF.includes(d.modulo)));
+  const alDocsEmpresaShow=alDocsEmpresa.slice(0,5);
+  const alDocsQualifShow=alDocsQualif.slice(0,5);
+
+  const docItemHtml=(d)=>{
     const filialTag=(filialAtiva==='todas'&&d.filial)?
       '<span style="font-size:10px;font-weight:700;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle">'+esc(d.filial)+'</span>':'';
+    const pastaTag=(d.pasta_id&&pastaNomeMap[d.pasta_id])?
+      '<span style="font-size:10px;font-weight:700;background:var(--lxl);border:1px solid var(--bd2);color:#5C8A1F;padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle"><i class="ti ti-folder" style="font-size:9px"></i> '+esc(pastaNomeMap[d.pasta_id])+'</span>':'';
+    const compartTag=d._compartilhado?
+      '<span style="font-size:10px;font-weight:700;background:#FFF3CD;border:1px solid var(--bd2);color:#8A6D1E;padding:1px 7px;border-radius:20px;margin-left:6px;vertical-align:middle">🔗 De: '+esc(pastaFilialMap[d.pasta_id]||'—')+'</span>':'';
     const ls = d._liveStatus || d.status;
     return '<div class="tl-i">'+
       '<div class="tl-d" style="background:'+(ls==='x'?'var(--er)':'var(--wn)')+'"></div>'+
       '<div style="flex:1">'+
-        '<div class="tl-t">'+esc(d.nome)+filialTag+'</div>'+
+        '<div class="tl-t">'+esc(d.nome)+pastaTag+filialTag+compartTag+'</div>'+
         '<div class="tl-m">'+esc(d.modulo)+' · Validade: '+fd(d.data_validade)+' · '+dHtml(d.data_validade)+'</div>'+
       '</div>'+
       stB(ls)+'</div>';
-  }).join('');
-  const alertsHtml=(!alDocs.length&&!eficPend.length&&!(popsReview&&popsReview.length))
-    ?'<div class="empty" style="padding:20px"><i class="ti ti-circle-check" style="color:var(--ok);font-size:30px;margin-bottom:8px"></i><div class="empty-t" style="font-size:12.5px">Nenhum alerta</div></div>'
-    :popRevItems+eficItems+docItems;
+  };
+  const docItemsEmpresa=alDocsEmpresaShow.map(docItemHtml).join('');
+  const docItemsQualif=alDocsQualifShow.map(docItemHtml).join('');
+  const emptyAlert=(msg)=>'<div class="empty" style="padding:20px"><i class="ti ti-circle-check" style="color:var(--ok);font-size:30px;margin-bottom:8px"></i><div class="empty-t" style="font-size:12.5px">'+msg+'</div></div>';
+  const alertsEmpresaHtml=(!alDocsEmpresa.length&&!eficPend.length&&!(popsReview&&popsReview.length))
+    ?emptyAlert('Nenhum alerta de documentos da empresa')
+    :popRevItems+eficItems+docItemsEmpresa;
+  const alertsQualifHtml=!alDocsQualif.length
+    ?emptyAlert('Nenhum alerta de qualificação')
+    :docItemsQualif;
 
   const c=document.getElementById('cnt');
   c.innerHTML=
@@ -1918,8 +1930,11 @@ async function renderDash(){
       '</div>'+
     '</div>'+
     '<div class="sg">'+
-      '<div class="card"><div class="st-title"><i class="ti ti-alert-circle" style="color:var(--er)"></i>Alertas de Vencimento</div>'+alertsHtml+'</div>'+
-      '<div class="card"><div class="st-title"><i class="ti ti-shield-check"></i>Índice de Conformidade</div>'+
+      '<div class="card"><div class="st-title"><i class="ti ti-building" style="color:var(--er)"></i>Alertas — Documentos da Empresa</div>'+alertsEmpresaHtml+'</div>'+
+      '<div class="card"><div class="st-title"><i class="ti ti-building-store" style="color:var(--in)"></i>Alertas — Qualif. Fornecedores/Serviços</div>'+alertsQualifHtml+'</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="st-title"><i class="ti ti-shield-check"></i>Índice de Conformidade</div>'+
         '<div class="cr-w">'+
           '<div class="ring-c"><svg viewBox="0 0 95 95" width="95" height="95">'+
             '<circle cx="47.5" cy="47.5" r="38" fill="none" stroke="var(--bd)" stroke-width="9"/>'+
@@ -1937,30 +1952,6 @@ async function renderDash(){
             '<div style="background:var(--bg);border-radius:9px;padding:11px;text-align:center"><div style="font-size:20px;font-weight:800;font-family:\'Nunito\',sans-serif;color:'+c+'">'+v+'</div><div style="font-size:10px;color:var(--t3);margin-top:2px">'+l+'</div></div>'
           ).join('')+
         '</div>'+
-      '</div>'+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="sh2" style="margin-bottom:14px">'+
-        '<div class="st-title" style="margin:0"><i class="ti ti-files"></i>Documentos Recentes</div>'+
-        '<select class="fi" style="width:160px;padding:6px 28px 6px 10px;font-size:11.5px" onchange="filtDD(this.value)">'+
-          '<option value="">Todos</option><option value="v">Vigentes</option><option value="p">Próximos</option><option value="x">Vencidos</option>'+
-        '</select>'+
-      '</div>'+
-      '<div class="tw"><table><thead><tr><th>Documento</th>'+
-        (filialAtiva==='todas'?'<th>Filial</th>':'')+
-        '<th>Módulo</th><th>Responsável</th><th>Validade</th><th>Dias Rest.</th><th>Status</th></tr></thead>'+
-      '<tbody id="dDBody">'+D.slice(0,8).map(d=>'<tr data-st="'+d.status+'">'+
-        '<td><div style="font-weight:600">'+esc(d.nome)+'</div>'+
-          '<div style="margin-top:3px">'+(d.tags||'').split(',').filter(Boolean).slice(0,3).map(t=>'<span class="chip l">'+esc(t.trim())+'</span>').join('')+'</div>'+
-          '</td>'+
-        (filialAtiva==='todas'?'<td><span style="font-size:11px;font-weight:600;background:var(--pxl);border:1px solid var(--bd2);color:var(--p);padding:2px 7px;border-radius:20px">'+esc(d.filial||'—')+'</span></td>':'')+
-        '<td style="color:var(--t2)">'+esc(d.modulo)+'</td>'+
-        '<td style="color:var(--t2)">'+esc(d.responsavel)+'</td>'+
-        '<td>'+fd(d.data_validade)+'</td>'+
-        '<td>'+dHtml(d.data_validade,d.val_indeterminada)+'</td>'+
-        '<td>'+stB(d._liveStatus||d.status)+'</td>'+
-      '</tr>').join('')+
-      '</tbody></table></div>'+
     '</div>';
 
   setTimeout(()=>{
@@ -2240,17 +2231,33 @@ async function restaurarDoc(id){ showLoading('Restaurando...'); await sb.from('d
 async function renderPastaGrid(v, subNome){
   try {
   let pQuery=sb.from('qualif_pastas').select('*').eq('submodulo',subNome).order('nome');
-  if(filialAtiva!=='todas'){ pQuery=pQuery.eq('filial',filialAtiva); }
+  const {data:Pall} = await pQuery;
+  // Pastas compartilhadas: aparecem também nas filiais marcadas em filiais_compartilhadas, sem duplicar o registro
+  const P = (filialAtiva==='todas') ? (Pall||[]) : (Pall||[]).filter(p=>p.filial===filialAtiva || (p.filiais_compartilhadas||[]).includes(filialAtiva));
   const isPops=curV==='pops';
   const pastaDesc=isPops?'POPs — Selecione ou crie uma pasta por procedimento':'Qualificações/Validações — Selecione ou crie uma pasta';
   const pastaEmpty=isPops?'Crie uma pasta para cada POP (ex: POP 001 — Recebimento)':'Crie uma pasta para cada empresa, cliente ou fornecedor';
   const folderIco=isPops?'ti-file-description':'ti-folder';
   const cardClass=isPops?'pasta-card pop-card':'pasta-card';
-  const {data:P} = await pQuery;
   // Build counts per pasta
   const {data:docCounts}=await sb.from('documentos').select('pasta_id').eq('obsoleto',false);
   const counts={};
   (docCounts||[]).forEach(d=>{ if(d.pasta_id) counts[d.pasta_id]=(counts[d.pasta_id]||0)+1; });
+  const pastaCardHtml=(p)=>{
+    const compart=p.filiais_compartilhadas||[];
+    const shareTag=compart.length?'<div style="font-size:10px;color:#5C8A1F;font-weight:700;margin-top:4px">🔗 Compartilhada: '+esc(compart.join(', '))+'</div>':'';
+    const ownerNote=(filialAtiva!=='todas'&&p.filial!==filialAtiva)?'<div style="font-size:10px;color:var(--t3);margin-top:2px">De: '+esc(p.filial||'GO')+'</div>':'';
+    return '<div class="'+cardClass+'" data-pastaid="'+p.id+'" data-pastanome="'+esc(p.nome)+'">'+
+      '<div class="pasta-actions">'+
+        '<div class="bic edt" data-editpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" data-submod="'+esc(subNome)+'" data-filial="'+esc(p.filial||'')+'" data-compartilhadas="'+esc(compart.join(','))+'" title="Renomear"><i class="ti ti-edit"></i></div>'+
+        '<div class="bic del" data-delpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" title="Excluir"><i class="ti ti-trash"></i></div>'+
+      '</div>'+
+      '<div class="p-ico"><i class="ti '+folderIco+'"></i></div>'+
+      '<div class="p-nome">'+esc(p.nome)+'</div>'+
+      '<div class="p-count">'+(counts[p.id]||0)+' documento(s)</div>'+
+      ownerNote+shareTag+
+    '</div>';
+  };
   // Build cards grouped by filial when viewing all
   let cardsHtml='';
   if(filialAtiva==='todas'){
@@ -2258,7 +2265,7 @@ async function renderPastaGrid(v, subNome){
     const filialOrder=FILIAIS.map(f=>f.nome);
     const grouped={};
     P.forEach(p=>{
-      const key=p.filial||'Matriz';
+      const key=p.filial||'GO';
       if(!grouped[key]) grouped[key]=[];
       grouped[key].push(p);
     });
@@ -2272,31 +2279,11 @@ async function renderPastaGrid(v, subNome){
         '<span style="font-size:11.5px;font-weight:700;color:var(--p);text-transform:uppercase;letter-spacing:.5px">'+esc(filialKey)+'</span>'+
         '<span style="font-size:10.5px;color:var(--t3);font-weight:400">('+grpPastas.length+' pasta(s))</span>'+
       '</div>';
-      grpPastas.forEach(p=>{
-        cardsHtml+='<div class="'+cardClass+'" data-pastaid="'+p.id+'" data-pastanome="'+esc(p.nome)+'">'+
-          '<div class="pasta-actions">'+
-            '<div class="bic edt" data-editpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" data-submod="'+esc(subNome)+'" title="Renomear"><i class="ti ti-edit"></i></div>'+
-            '<div class="bic del" data-delpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" title="Excluir"><i class="ti ti-trash"></i></div>'+
-          '</div>'+
-          '<div class="p-ico"><i class="ti '+folderIco+'"></i></div>'+
-          '<div class="p-nome">'+esc(p.nome)+'</div>'+
-          '<div class="p-count">'+(counts[p.id]||0)+' documento(s)</div>'+
-        '</div>';
-      });
+      grpPastas.forEach(p=>{ cardsHtml+=pastaCardHtml(p); });
     });
   } else {
-    // Single filial — simple grid
-    P.forEach(p=>{
-      cardsHtml+='<div class="'+cardClass+'" data-pastaid="'+p.id+'" data-pastanome="'+esc(p.nome)+'">'+
-        '<div class="pasta-actions">'+
-          '<div class="bic edt" data-editpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" data-submod="'+esc(subNome)+'" title="Renomear"><i class="ti ti-edit"></i></div>'+
-          '<div class="bic del" data-delpasta="'+p.id+'" data-pastanome="'+esc(p.nome)+'" title="Excluir"><i class="ti ti-trash"></i></div>'+
-        '</div>'+
-        '<div class="p-ico"><i class="ti '+folderIco+'"></i></div>'+
-        '<div class="p-nome">'+esc(p.nome)+'</div>'+
-        '<div class="p-count">'+(counts[p.id]||0)+' documento(s)</div>'+
-      '</div>';
-    });
+    // Single filial — simple grid (inclui pastas compartilhadas com esta filial)
+    P.forEach(p=>{ cardsHtml+=pastaCardHtml(p); });
   }
   const bodyHtml=!P.length
     ?'<div class="card"><div class="empty"><i class="ti ti-folder-off"></i><div class="empty-t">Nenhuma pasta criada</div><p style="font-size:12px;margin-bottom:14px">'+pastaEmpty+'</p><button class="btn btn-l" id="btnNPasta2" data-submod="'+esc(subNome)+'"><i class="ti ti-folder-plus"></i>Criar Primeira Pasta</button></div></div>'
@@ -2402,15 +2389,23 @@ async function renderDocsDePasta(subNome){
 
 function voltarPastas(){ curPastaId=null; curPastaNome=''; render(); }
 
+function buildShareChecklist(ownerFilial, checkedArr){
+  const opts=FILIAIS.map(f=>f.nome).filter((v,i,a)=>a.indexOf(v)===i).filter(f=>f!==ownerFilial);
+  if(!opts.length) return '<div style="font-size:11.5px;color:var(--t3)">Nenhuma outra filial disponível</div>';
+  return opts.map(f=>'<label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12.5px;cursor:pointer">'+
+    '<input type="checkbox" class="pasta-share-chk" value="'+esc(f)+'" '+(checkedArr.includes(f)?'checked':'')+' style="width:16px;height:16px;accent-color:var(--l)"/>'+esc(f)+
+  '</label>').join('');
+}
 async function savePasta(){
   const nome=document.getElementById('pastaNome').value.trim();
   if(!nome){toast('Informe o nome da pasta','d');return;}
   const id=document.getElementById('pastaId').value;
   const submod=document.getElementById('pastaSubmod').value;
-  const filial=filialAtiva==='todas'?'Matriz':filialAtiva;
+  const filial=filialAtiva==='todas'?'GO':filialAtiva;
+  const compartilhadas=Array.from(document.querySelectorAll('.pasta-share-chk:checked')).map(c=>c.value);
   showLoading('Salvando...');
-  if(id){ await sb.from('qualif_pastas').update({nome}).eq('id',id); toast('Pasta renomeada!','s'); }
-  else { await sb.from('qualif_pastas').insert({nome,submodulo:submod,filial}); toast('Pasta criada!','s'); }
+  if(id){ await sb.from('qualif_pastas').update({nome,filiais_compartilhadas:compartilhadas}).eq('id',id); toast('Pasta atualizada!','s'); }
+  else { await sb.from('qualif_pastas').insert({nome,submodulo:submod,filial,filiais_compartilhadas:compartilhadas}); toast('Pasta criada!','s'); }
   hideLoading(); closeModal('mPasta'); render();
 }
 
@@ -3218,9 +3213,9 @@ document.getElementById('cnt').addEventListener('click', e => {
   if(upReg){ uploadToReg(upReg.dataset['upload-reg']||upReg.getAttribute('data-upload-reg')); return; }
   const pastaCard = t.closest('.pasta-card');
   if(pastaCard && !t.closest('.pasta-actions')){ curPastaId=pastaCard.dataset.pastaid; curPastaNome=pastaCard.dataset.pastanome; render(); return; }
-  if(t.closest('#btnNPasta')||t.closest('#btnNPasta2')){ const btn=t.closest('#btnNPasta')||t.closest('#btnNPasta2'); document.getElementById('pastaId').value=''; document.getElementById('pastaNome').value=''; document.getElementById('pastaSubmod').value=btn.dataset.submod||SMAP[curV]||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-folder-plus" style="color:var(--l)"></i>Nova Pasta'; openModal('mPasta'); return; }
+  if(t.closest('#btnNPasta')||t.closest('#btnNPasta2')){ const btn=t.closest('#btnNPasta')||t.closest('#btnNPasta2'); document.getElementById('pastaId').value=''; document.getElementById('pastaNome').value=''; document.getElementById('pastaSubmod').value=btn.dataset.submod||SMAP[curV]||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-folder-plus" style="color:var(--l)"></i>Nova Pasta'; const ownerNew=filialAtiva==='todas'?'GO':filialAtiva; document.getElementById('fgPastaShare').innerHTML=buildShareChecklist(ownerNew,[]); openModal('mPasta'); return; }
   const editUsrEl=t.closest('[data-editusr]'); if(editUsrEl){ editUsr(editUsrEl.dataset.editusr); return; }
-  const editPasta=t.closest('[data-editpasta]'); if(editPasta){ document.getElementById('pastaId').value=editPasta.dataset.editpasta; document.getElementById('pastaNome').value=editPasta.dataset.pastanome; document.getElementById('pastaSubmod').value=editPasta.dataset.submod||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Renomear Pasta'; openModal('mPasta'); return; }
+  const editPasta=t.closest('[data-editpasta]'); if(editPasta){ document.getElementById('pastaId').value=editPasta.dataset.editpasta; document.getElementById('pastaNome').value=editPasta.dataset.pastanome; document.getElementById('pastaSubmod').value=editPasta.dataset.submod||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Renomear Pasta'; const ownerEdit=editPasta.dataset.filial||'GO'; const checkedEdit=(editPasta.dataset.compartilhadas||'').split(',').filter(Boolean); document.getElementById('fgPastaShare').innerHTML=buildShareChecklist(ownerEdit,checkedEdit); openModal('mPasta'); return; }
   const delPasta=t.closest('[data-delpasta]'); if(delPasta){ confirm2(`Excluir a pasta "${delPasta.dataset.pastanome}"?`,()=>deletePasta(delPasta.dataset.delpasta,delPasta.dataset.pastanome)); return; }
   if(t.closest('.back-btn')){ voltarPastas(); return; }
   if(t.closest('[data-hist]')){ showHistory(t.closest('[data-hist]').dataset.hist); return; }
@@ -4051,6 +4046,10 @@ checkAuth();
       <div class="fg">
         <label class="fl">Nome da Pasta *</label>
         <input class="fi" type="text" id="pastaNome" placeholder="Ex: POP 001 — Recebimento, Pharma Distribuidora..."/>
+      </div>
+      <div class="fg">
+        <label class="fl">Compartilhar também com <span style="font-weight:400;color:var(--t3)">(opcional)</span></label>
+        <div id="fgPastaShare" style="max-height:160px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:8px 12px"></div>
       </div>
     </div>
     <div class="mf">
