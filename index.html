@@ -71,7 +71,8 @@ html,body{height:100%;font-family:'Nunito Sans',sans-serif;font-size:13px;color:
 #sb.col{width:56px}
 #sb.col .logo-txt,#sb.col .lbl,#sb.col .arr,#sb.col .un,#sb.col .ur,#sb.col .sb-sec{display:none!important}
 #sb.col .sb-logo{justify-content:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.1)}
-#sb.col .logo-ico{margin:0;width:36px;height:36px}
+#sb.col .logo-ico{margin:0;width:36px;height:36px;display:flex!important}
+#sb.col .logo-full{display:none!important}
 #sb.col .ni{justify-content:center;padding:11px 0;margin-right:0;border-radius:0}
 #sb.col .ni .ico{font-size:20px}
 #sb.col .ni.act{border-left:3px solid var(--l);background:rgba(141,198,63,.15)}
@@ -387,7 +388,8 @@ tr.selected td{background:#EBF4F7 !important}
 <div id="app" style="display:none">
 <nav id="sb">
   <div class="sb-logo" onclick="toggleSB()">
-    <div style="background:#fff;border-radius:10px;padding:7px 12px;display:inline-flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15)"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="height:30px;width:auto;max-width:155px;object-fit:contain" /></div><span style="display:none" id="logoIco">JC</span><span style="display:none" id="logoName">JC Farmacêutica</span><span style="display:none" id="logoSub">SGQ</span>
+    <div class="logo-ico" style="display:none">JC</div>
+    <div class="logo-full" style="background:#fff;border-radius:10px;padding:7px 12px;display:inline-flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.15)"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" class="logo-img" alt="JC Farmacêutica" style="height:30px;width:auto;max-width:155px;object-fit:contain" /></div><span style="display:none" id="logoIco">JC</span><span style="display:none" id="logoName">JC Farmacêutica</span><span style="display:none" id="logoSub">SGQ</span>
   </div>
   <div class="sb-sc" id="sbNav"></div>
   <div class="sb-ft">
@@ -911,19 +913,71 @@ function confirm2(msg,cb,opts){
 // NOTIFICAÇÕES
 // ============================================================
 async function buildNotifs(){
-  // 1. Static notifications from DB
-  let query = sb.from('notificacoes').select('*').order('criado_em', { ascending:false });
-  const { data } = await query;
-  const notifs = data || [];
-
-  // 2. Dynamic: Retention alerts — obsolete docs approaching 5yr destruction date
   const hoje0=new Date(); hoje0.setHours(0,0,0,0);
   const lim180=new Date(hoje0); lim180.setDate(hoje0.getDate()+180);
-  const { data:retDocs } = await sb.from('documentos')
+
+  // 1. Static notifications from DB
+  const notifQ = sb.from('notificacoes').select('*').order('criado_em', { ascending:false });
+
+  // 2. Dynamic: Retention alerts — obsolete docs approaching 5yr destruction date
+  const retQ = sb.from('documentos')
     .select('id,nome,obsoleto_em,data_destruicao')
     .eq('obsoleto',true)
     .not('obsoleto_em','is',null)
     .lte('data_destruicao', lim180.toISOString().split('T')[0]);
+
+  // 3. Dynamic: POPs review alerts (docs in POPs pasta with data_validade approaching)
+  let popsQ = sb.from('documentos')
+    .select('id,nome,data_validade,filial,pasta_id')
+    .eq('obsoleto',false)
+    .is('excluido_em',null)
+    .not('pasta_id','is',null)
+    .not('data_validade','is',null)
+    .lte('data_validade', new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
+  if(filialAtiva && filialAtiva !== 'todas'){ popsQ = popsQ.eq('filial',filialAtiva); }
+
+  // 4. Avaliação de Eficácia de treinamentos
+  let treinEficQ = sb.from('treinamentos')
+    .select('id,nome,data_realizacao,avaliacao_eficacia,filial')
+    .eq('obsoleto', false)
+    .is('excluido_em', null)
+    .eq('avaliacao_eficacia', false)
+    .not('data_realizacao', 'is', null);
+  if(filialAtiva && filialAtiva !== 'todas') treinEficQ = treinEficQ.eq('filial', filialAtiva);
+
+  // 5. Audit due alerts
+  let audQ2 = sb.from('auditorias').select('id,tipo_auditoria,proxima_auditoria,filial').is('excluido_em',null).not('proxima_auditoria','is',null);
+  if(filialAtiva !== 'todas') audQ2 = audQ2.eq('filial',filialAtiva);
+
+  // 6. Revisão periódica — documentos com revisar_em se aproximando ou vencido
+  const limRev = new Date(hoje0); limRev.setDate(hoje0.getDate() + (CFG.alert_dias||30));
+  let revQ = sb.from('documentos')
+    .select('id,nome,revisar_em,filial,modulo')
+    .eq('obsoleto', false)
+    .is('excluido_em', null)
+    .not('revisar_em', 'is', null)
+    .lte('revisar_em', limRev.toISOString().split('T')[0]);
+  if(filialAtiva && filialAtiva !== 'todas') revQ = revQ.eq('filial', filialAtiva);
+
+  // Todas as 6 consultas rodam em paralelo — nenhuma depende do resultado de outra.
+  // .catch() em auditorias/revisão preserva o comportamento antigo de "se uma falhar, não derruba as outras".
+  const [
+    { data },
+    { data:retDocs },
+    { data: popsReview },
+    { data: treinEfic },
+    { data:proximasAud }={data:[]},
+    { data: revDocs }={data:[]},
+  ] = await Promise.all([
+    notifQ,
+    retQ,
+    popsQ,
+    treinEficQ,
+    audQ2.then(v=>v, ()=>({data:[]})),
+    revQ.then(v=>v, ()=>({data:[]})),
+  ]);
+  const notifs = data || [];
+
   const retAlerts=(retDocs||[]).map(d=>{
     const dl=Math.ceil((new Date(d.data_destruicao)-hoje0)/86400000);
     return {
@@ -934,19 +988,6 @@ async function buildNotifs(){
     };
   });
 
-  // 3. Dynamic: POPs review alerts (docs in POPs pasta with data_validade approaching)
-  let popsQ = sb.from('documentos')
-    .select('id,nome,data_validade,filial,pasta_id')
-    .eq('obsoleto',false)
-    .is('excluido_em',null)
-    .not('pasta_id','is',null)
-    .not('data_validade','is',null)
-    .lte('data_validade', new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
-  // Only show pops review alerts for current filial
-  if(filialAtiva && filialAtiva !== 'todas'){
-    popsQ = popsQ.eq('filial',filialAtiva);
-  }
-  const { data: popsReview } = await popsQ;
   const popsAlerts = (popsReview||[]).map(d => {
     const dl = dLeft(d.data_validade);
     const isOverdue = dl < 0;
@@ -965,14 +1006,6 @@ async function buildNotifs(){
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const EFIC_PRAZO = 90;       // dias após realização para avaliar eficácia
   const EFIC_AVISO = 30;       // antecedência do aviso
-  let treinEficQ = sb.from('treinamentos')
-    .select('id,nome,data_realizacao,avaliacao_eficacia,filial')
-    .eq('obsoleto', false)
-    .is('excluido_em', null)
-    .eq('avaliacao_eficacia', false)
-    .not('data_realizacao', 'is', null);
-  if(filialAtiva && filialAtiva !== 'todas') treinEficQ = treinEficQ.eq('filial', filialAtiva);
-  const { data: treinEfic } = await treinEficQ;
   const eficAlerts = [];
   const eficWarn = [];
   (treinEfic||[]).forEach(t => {
@@ -1002,9 +1035,6 @@ async function buildNotifs(){
   // Audit due alerts
   let auditAlerts2 = [];
   try {
-    let audQ2 = sb.from('auditorias').select('id,tipo_auditoria,proxima_auditoria,filial').is('excluido_em',null).not('proxima_auditoria','is',null);
-    if(filialAtiva !== 'todas') audQ2 = audQ2.eq('filial',filialAtiva);
-    const {data:proximasAud} = await audQ2;
     const hj = new Date(); hj.setHours(0,0,0,0);
     auditAlerts2 = (proximasAud||[]).filter(a=>{
       const dias = Math.ceil((new Date(a.proxima_auditoria)-hj)/86400000);
@@ -1021,15 +1051,6 @@ async function buildNotifs(){
   // (ciclo de revisão independente do vencimento — ex: POPs revisados a cada 2 anos)
   let revAlerts = [];
   try {
-    const limRev = new Date(hoje0); limRev.setDate(hoje0.getDate() + (CFG.alert_dias||30));
-    let revQ = sb.from('documentos')
-      .select('id,nome,revisar_em,filial,modulo')
-      .eq('obsoleto', false)
-      .is('excluido_em', null)
-      .not('revisar_em', 'is', null)
-      .lte('revisar_em', limRev.toISOString().split('T')[0]);
-    if(filialAtiva && filialAtiva !== 'todas') revQ = revQ.eq('filial', filialAtiva);
-    const { data: revDocs } = await revQ;
     revAlerts = (revDocs||[]).map(d => {
       const dl = Math.ceil((new Date(d.revisar_em) - hoje0)/86400000);
       const overdue = dl < 0;
@@ -1821,11 +1842,12 @@ async function render(){
 async function renderDash(){
   const filQ=(t)=>{ if(filialAtiva==='todas') return t; return t.eq('filial',filialAtiva); };
   const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
-  const [{data:docs},{data:trein},{data:aud},{data:popsReview}]=await Promise.all([
+  const [{data:docs},{data:trein},{data:aud},{data:popsReview},{data:todasPastas}]=await Promise.all([
     filQ(sb.from('documentos').select('*')).eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false}),
     filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false).is('excluido_em',null),
     filQ(sb.from('auditorias').select('id,status,data_validade')).is('excluido_em',null),
     filQ(popsRevQ),
+    sb.from('qualif_pastas').select('id,nome,filial,filiais_compartilhadas'),
   ]);
   const D=docs||[],T=trein||[],A=aud||[];
   // Recalculate status live FIRST (DB status may be stale)
@@ -1898,8 +1920,7 @@ async function renderDash(){
     '<div style="flex:1"><div class="tl-t">📋 Avaliação de Eficácia — '+esc(t.nome)+'</div>'+
     '<div class="tl-m">Realizado em '+fd(t.data_realizacao)+' · Avaliação pendente</div></div>'+
     '<span class="st p"><span class="st-dot"></span>Pendente</span></div>').join('');
-  // Pastas (fornecedor/POP) — nome, filial dona e compartilhamento
-  const {data:todasPastas}=await sb.from('qualif_pastas').select('id,nome,filial,filiais_compartilhadas');
+  // Pastas (fornecedor/POP) — nome, filial dona e compartilhamento (já veio junto no Promise.all acima)
   const pastaNomeMap={},pastaFilialMap={};
   (todasPastas||[]).forEach(p=>{ pastaNomeMap[p.id]=p.nome; pastaFilialMap[p.id]=p.filial; });
 
