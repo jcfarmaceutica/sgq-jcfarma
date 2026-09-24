@@ -711,7 +711,11 @@ async function launchApp(){
   }
   updateSearchPlaceholder();
   await buildNotifs();
-  buildNav(); setBc('Dashboard'); render();
+  curV=homeView();
+  const navIni=NAV.find(n=>n.id===curV);
+  const lblIni=navIni?navIni.lbl:'Dashboard';
+  if(curV!=='dash'&&navIni&&navIni.sub) openNav[curV]=true;
+  buildNav(); setBc(lblIni); render();
 }
 
 function updateSearchPlaceholder(){
@@ -737,7 +741,7 @@ async function doLogout(){
 // ============================================================
 // CFG — carrega do Supabase
 // ============================================================
-let CFG = { empresa:'JC Farmacêutica', subtitulo:'SGQ · GESTÃO DA QUALIDADE', user_nome:'', user_cargo:'', user_iniciais:'', alert_dias:30, notif_sistema:true, notif_email:false, filial_acesso:'todas' };
+let CFG = { empresa:'JC Farmacêutica', subtitulo:'SGQ · GESTÃO DA QUALIDADE', user_nome:'', user_cargo:'', user_iniciais:'', alert_dias:30, notif_sistema:true, notif_email:false, filial_acesso:'todas', perfil:'admin' };
 let FILIAIS = [];
 let filialAtiva = 'GO'; // filial currently being viewed
 let isMatriz = false; // true if user has access to all filiais
@@ -769,7 +773,7 @@ async function saveCfgDB(){
   const { data: { session } } = await sb.auth.getSession();
   if(!session) return;
   const userId = session.user.id;
-  const payload = { user_id:userId, empresa:CFG.empresa, subtitulo:CFG.subtitulo, user_nome:CFG.user_nome, user_cargo:CFG.user_cargo, user_iniciais:CFG.user_iniciais, alert_dias:CFG.alert_dias, notif_sistema:CFG.notif_sistema, notif_email:CFG.notif_email, filial_acesso:CFG.filial_acesso||'todas' };
+  const payload = { user_id:userId, empresa:CFG.empresa, subtitulo:CFG.subtitulo, user_nome:CFG.user_nome, user_cargo:CFG.user_cargo, user_iniciais:CFG.user_iniciais, alert_dias:CFG.alert_dias, notif_sistema:CFG.notif_sistema, notif_email:CFG.notif_email, filial_acesso:CFG.filial_acesso||'todas', perfil:CFG.perfil||'admin' };
   if(cfgId){ await sb.from('configuracoes').update(payload).eq('id', cfgId); }
   else { const { data } = await sb.from('configuracoes').insert(payload).select().single(); if(data) cfgId=data.id; }
 }
@@ -833,12 +837,19 @@ function toggleSB(){
 }
 function buildNav(){
   const c=document.getElementById('sbNav'); c.innerHTML='';
-  NAV.forEach(item=>{
+  // Filtra pelo perfil: itens não permitidos somem, e separadores que ficariam sem nenhum item também
+  const navVis=NAV.filter(item=>item.sep||canView(item.id));
+  const NAVF=navVis.filter((item,i)=>{
+    if(!item.sep) return true;
+    for(let j=i+1;j<navVis.length;j++){ if(navVis[j].sep) break; return true; }
+    return false;
+  });
+  NAVF.forEach(item=>{
     if(item.sep){ if(!sbCol){ const s=document.createElement('div'); s.className='sb-sec'; s.textContent=item.lbl; c.appendChild(s); } return; }
     const isAct=curV===item.id||(item.sub&&item.sub.some(s=>s.id===curV));
     const isOpen=openNav[item.id];
     const w=document.createElement('div');
-    const subHtml=item.sub&&isOpen?'<div class="sni-wrap">'+item.sub.filter(s=>opSubAvail(s.id)).map(s=>`<div class="sni ${curV===s.id?'act':''}" data-id="${s.id}" data-parent="${item.lbl}" data-label="${s.lbl}"><i class="ti ti-point" style="font-size:10px"></i>${s.lbl}</div>`).join('')+'</div>':'';
+    const subHtml=item.sub&&isOpen?'<div class="sni-wrap">'+item.sub.filter(s=>opSubAvail(s.id)&&canView(s.id)).map(s=>`<div class="sni ${curV===s.id?'act':''}" data-id="${s.id}" data-parent="${item.lbl}" data-label="${s.lbl}"><i class="ti ti-point" style="font-size:10px"></i>${s.lbl}</div>`).join('')+'</div>':'';
     w.innerHTML=`<div class="ni ${isAct?'act':''} ${isOpen?'open':''}" data-id="${item.id}" data-hassub="${item.sub?'1':'0'}" title="${item.lbl}"><i class="ti ${item.ico} ico"></i><span class="lbl">${item.lbl}</span>${item.sub?'<i class="ti ti-chevron-right arr"></i>':''}</div>${subHtml}`;
     c.appendChild(w);
   });
@@ -1165,7 +1176,8 @@ function newDoc(){
   document.getElementById('dVer').value='1.0'; document.getElementById('dStat').value='v';
   document.getElementById('fInput').value='';
   const navToMod={reg:'Documentação Regulatória',alv_san:'Documentação Regulatória',alv_func:'Documentação Regulatória',crt:'Documentação Regulatória',cercon:'Documentação Regulatória',licamb:'Documentação Regulatória',projeto:'Documentação Regulatória',afe:'Documentação Regulatória',cnpj:'Documentação Regulatória',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Serviços',agua:'Serviços',calib:'Serviços',qterm:'Serviços',bebed:'Serviços',clim:'Serviços',incin:'Serviços',extin:'Serviços',qualif:'Qualificações',qforn:'Qualificações',qcli:'Qualificações',qserv:'Qualificações',qsist:'Qualificações',trein:'Treinamentos',audit:'Auditorias'};
-  document.getElementById('dMod').value=navToMod[curV]||'Documentação Regulatória';
+  document.getElementById('dMod').innerHTML=modOptionsHtml();
+  document.getElementById('dMod').value=navToMod[curV]||(allowedModulos()?allowedModulos()[0]:'Documentação Regulatória');
   document.getElementById('dSub').value=SMAP[curV]||'';
   setIndeterminado(false);
   if(pendingFile){
@@ -1193,6 +1205,7 @@ async function editDoc(id){
   document.getElementById('dId').value=d.id;
   document.getElementById('mDocTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Editar Documento';
   document.getElementById('dNome').value=d.nome;
+  document.getElementById('dMod').innerHTML=modOptionsHtml();
   document.getElementById('dMod').value=d.modulo;
   document.getElementById('dSub').value=d.submodulo||'';
   document.getElementById('dResp').value=d.responsavel;
@@ -1269,6 +1282,8 @@ async function doSearch(val){
   if(filialAtiva !== 'todas'){
     searchQ = searchQ.eq('filial',filialAtiva);
   }
+  const modsPerm = allowedModulos();
+  if(modsPerm){ searchQ = searchQ.in('modulo',modsPerm); }
   const { data:res } = await searchQ;
   const c = document.getElementById('cnt'); c.className='cnt fade-in';
 
@@ -1717,6 +1732,31 @@ async function saveCfgForm(){
 let MMAP={reg:'Documentação Regulatória',alv_san:'Alvará Sanitário',alv_func:'Alvará de Funcionamento',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qualif:'Qualificações/Validações',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',operacional:'Operacional',op_temp:'Temperatura e Umidade',op_limp:'Limpeza',op_receb:'Recebimento',op_exped:'Expedição'};
 let SMAP={alv_san:'Alvará Sanitário',alv_func:'Alvará de Funcionamento',crt:'CRT',cercon:'Cercon',licamb:'Licença Ambiental',projeto:'Projeto Arquitetônico',afe:'AFE e AE',cnpj:'CNPJ',dedet:'Dedetização',agua:"Limpeza de Caixa d'Água",calib:'Calibração',qterm:'Qualificação Térmica',bebed:'Bebedouros',clim:'Climatizador e Ar Condicionado',incin:'Incineração',extin:'Extintores',qforn:'Fornecedores',qcli:'Clientes',qserv:'Qualif. Serviços',qsist:'Sistemas',pops:'POPs'};
 let MMOD={reg:'Documentação Regulatória',pops:'POPs',pgrss:'PGRSS',organo:'Organograma e MBP',servicos:'Serviços'};
+// ============================================================
+// PERFIS DE ACESSO
+// views:null = acesso total. Caso contrário, só os ids listados.
+// modulos = valores do campo `modulo` que o perfil pode enxergar (usado na busca).
+// ============================================================
+const PERFIS={
+  admin:{ lbl:'Administrador (acesso total)', views:null, modulos:null, home:'dash' },
+  comprador:{
+    lbl:'Comprador (Doc. Regulatória + Qualif. Fornecedores)',
+    views:['reg','alv_san','alv_func','crt','cercon','licamb','projeto','afe','cnpj','qualif','qforn'],
+    modulos:['Documentação Regulatória','Qualificações'],
+    home:'reg'
+  }
+};
+function perfilAtual(){ return PERFIS[CFG.perfil] ? CFG.perfil : 'admin'; }
+function canView(id){ const p=PERFIS[perfilAtual()]; return (!p||!p.views) ? true : p.views.includes(id); }
+function allowedModulos(){ const p=PERFIS[perfilAtual()]; return (!p||!p.modulos) ? null : p.modulos; }
+function homeView(){ const p=PERFIS[perfilAtual()]; return (p&&p.home)||'dash'; }
+const TODOS_MODULOS=['Documentação Regulatória','POPs','PGRSS','Organograma e MBP','Serviços','Qualificações','Treinamentos','Auditorias'];
+function modOptionsHtml(){
+  const permitidos=allowedModulos();
+  const lista=permitidos?TODOS_MODULOS.filter(m=>permitidos.includes(m)):TODOS_MODULOS;
+  return lista.map(m=>'<option>'+m+'</option>').join('');
+}
+
 const PASTA_VIEWS=['qforn','qcli','qserv','qsist','pops'];
 const OP_VIEWS=['op_temp','op_limp','op_receb','op_exped'];
 // Filiais with Recebimento/Expedição
@@ -1748,6 +1788,13 @@ function setIndeterminado(v){
 async function render(){
   const c=document.getElementById('cnt'); c.className='cnt fade-in';
   c.innerHTML='<div class="empty"><div class="spin" style="margin:0 auto"></div></div>';
+  if(!canView(curV)){
+    c.innerHTML='<div class="card"><div class="empty"><i class="ti ti-lock" style="color:var(--er);font-size:32px"></i>'+
+      '<div class="empty-t">Acesso restrito</div>'+
+      '<p style="font-size:12.5px;color:var(--t3)">Seu perfil não tem permissão para acessar esta área.</p>'+
+      '</div></div>';
+    return;
+  }
   try {
     if(curV==='dash'){ await renderDash(); return; }
     if(curV==='cfg'){ c.innerHTML=rCfg(); return; }
@@ -3079,6 +3126,7 @@ async function renderUsuarios(){
         '<div style="font-size:10.5px;color:var(--t3);margin-top:1px">'+esc(u.user_email||'')+'</div></div>'+
       '</div></td>'+
       '<td><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--pxl);border:1px solid var(--bd2);color:var(--p)">'+esc(u.filial_acesso||'todas')+'</span></td>'+
+      '<td><span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;'+((u.perfil&&u.perfil!=='admin')?'background:#FFF3CD;border:1px solid var(--bd2);color:#8A6D1E':'background:var(--lxl);border:1px solid var(--bd2);color:#5C8A1F')+'">'+esc((u.perfil==='comprador')?'Comprador':'Administrador')+'</span></td>'+
       '<td style="font-size:12px;color:var(--t2)">'+(u.alert_dias||30)+' dias</td>'+
       '<td><div class="bic edt" data-editusr="'+u.id+'" title="Editar"><i class="ti ti-edit"></i></div></td>'+
       '</tr>';
@@ -3094,7 +3142,7 @@ async function renderUsuarios(){
       (!C.length
         ?'<div class="empty"><i class="ti ti-users"></i><div class="empty-t">Nenhum usuário cadastrado</div></div>'
         :'<div class="tw"><table>'+
-          '<thead><tr><th>Usuário</th><th>Filial de Acesso</th><th>Alerta (dias)</th><th>Ações</th></tr></thead>'+
+          '<thead><tr><th>Usuário</th><th>Filial de Acesso</th><th>Perfil</th><th>Alerta (dias)</th><th>Ações</th></tr></thead>'+
           '<tbody id="usrTB">'+rows+'</tbody>'+
         '</table></div>')+
     '</div>';
@@ -3116,6 +3164,11 @@ async function editUsr(cfgId){
   sel.innerHTML='<option value="todas">Todas (Matriz)</option>'+
     FILIAIS.map(f=>'<option value="'+esc(f.nome)+'">'+esc(f.nome)+'</option>').join('');
   sel.value=u.filial_acesso||'todas';
+  const selP=document.getElementById('usrPerfil');
+  if(selP){
+    selP.innerHTML=Object.keys(PERFIS).map(k=>'<option value="'+k+'">'+esc(PERFIS[k].lbl)+'</option>').join('');
+    selP.value=PERFIS[u.perfil]?u.perfil:'admin';
+  }
   openModal('mUsr');
 }
 
@@ -3127,7 +3180,8 @@ async function saveUsr(){
     user_cargo:document.getElementById('usrCargo').value.trim(),
     user_iniciais:(document.getElementById('usrIni').value.trim()||'?').substring(0,2).toUpperCase(),
     alert_dias:parseInt(document.getElementById('usrDias').value)||30,
-    filial_acesso:document.getElementById('usrFilial').value||'todas'
+    filial_acesso:document.getElementById('usrFilial').value||'todas',
+    perfil:(document.getElementById('usrPerfil')||{}).value||'admin'
   };
   showLoading('Salvando...');
   await sb.from('configuracoes').update(payload).eq('id',id);
@@ -3975,7 +4029,7 @@ async function exportMestraExcel(){
 
     const wb = XLSX.utils.book_new();
     const sheetName = (filialAtiva==='todas' ? 'Todas' : filialAtiva).substring(0,31);
-    XLSX.utils.book_append_sheet(wb, ws, 'Lista Mestra');
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
     const filialLabel = filialAtiva==='todas' ? 'Todas' : filialAtiva;
     const dateStr = new Date().toISOString().split('T')[0];
@@ -4096,6 +4150,10 @@ checkAuth();
         <select class="fi" id="usrFilial">
           <option value="todas">Todas (Matriz)</option>
         </select>
+      </div>
+      <div class="fg"><label class="fl">Perfil de Acesso</label>
+        <select class="fi" id="usrPerfil"></select>
+        <div style="font-size:10.5px;color:var(--t3);margin-top:5px">O perfil <strong>Comprador</strong> enxerga apenas Documentação Regulatória e Qualificação de Fornecedores.</div>
       </div>
     </div>
     <div class="mf">
