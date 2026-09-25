@@ -1764,9 +1764,9 @@ const PERFIS={
   admin:{ lbl:'Administrador (acesso total)', views:null, modulos:null, home:'dash' },
   comprador:{
     lbl:'Comprador (Doc. Regulatória + Qualif. Fornecedores)',
-    views:['reg','alv_san','alv_func','crt','cercon','licamb','projeto','afe','cnpj','qualif','qforn'],
+    views:['dash','reg','alv_san','alv_func','crt','cercon','licamb','projeto','afe','cnpj','qualif','qforn'],
     modulos:['Documentação Regulatória','Qualificações'],
-    home:'reg'
+    home:'dash'
   }
 };
 function perfilAtual(){ return PERFIS[CFG.perfil] ? CFG.perfil : 'admin'; }
@@ -1968,6 +1968,37 @@ async function renderDash(){
     :docItemsQualif;
 
   const c=document.getElementById('cnt');
+
+  // ---- Dashboard enxuto do COMPRADOR: só Qualif. Fornecedores ----
+  if(perfilAtual()==='comprador'){
+    // Universo de qualificação = documentos módulo Qualificações do escopo do comprador (próprios + compartilhados)
+    const qualifTodos=D.filter(d=>d.modulo==='Qualificações')
+      .concat(alDocsCompartilhados.filter(d=>d.modulo==='Qualificações'));
+    const qVig=qualifTodos.filter(d=>(d._liveStatus||d.status)==='v').length;
+    const qProx=qualifTodos.filter(d=>(d._liveStatus||d.status)==='p').length;
+    const qVenc=qualifTodos.filter(d=>(d._liveStatus||d.status)==='x').length;
+    const qTotal=qualifTodos.length;
+    c.innerHTML=
+      '<div class="ph">'+
+        '<div class="ph-l"><div class="ph-bar"></div><div>'+
+          '<div class="pt">Dashboard — Qualificação de Fornecedores</div>'+
+          '<div class="ps">'+(filialAtiva==='todas'?'Todas as Filiais':esc(filialAtiva))+'</div>'+
+        '</div></div>'+
+        '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--t3)">'+new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</span></div>'+
+      '</div>'+
+      (isMatriz?'<div class="ftabs"><div class="ftab '+(filialAtiva==='todas'?'act':'')+'" data-switchfilial="todas" onclick="switchDashFilial(this.dataset.switchfilial)"><i class="ti ti-building-skyscraper"></i> Todas</div>'+
+        FILIAIS.map(f=>'<div class="ftab '+(filialAtiva===f.nome?'act':'')+'" data-switchfilial="'+f.nome+'" onclick="switchDashFilial(this.dataset.switchfilial)">'+esc(f.nome)+'</div>').join('')+
+      '</div>':'')+
+      '<div class="kpi-g">'+
+        '<div class="kpi b"><div class="kl">Fornecedores (Docs.)</div><div class="kv">'+qTotal+'</div><div class="ks">Qualif./Validações</div><i class="ti ti-building-store k-ico"></i></div>'+
+        '<div class="kpi g"><div class="kl">Vigentes</div><div class="kv s">'+qVig+'</div><div class="ks">'+(qTotal?Math.round(qVig/qTotal*100):0)+'% em dia</div><i class="ti ti-circle-check k-ico"></i></div>'+
+        '<div class="kpi y"><div class="kl">Próximos ao Vencimento</div><div class="kv w">'+qProx+'</div><div class="ks">Atenção nos próximos '+(CFG.alert_dias||30)+' dias</div><i class="ti ti-clock k-ico"></i></div>'+
+        '<div class="kpi r"><div class="kl">Vencidos</div><div class="kv d">'+qVenc+'</div><div class="ks">Requer ação imediata</div><i class="ti ti-alert-triangle k-ico"></i></div>'+
+      '</div>'+
+      '<div class="card"><div class="st-title"><i class="ti ti-building-store" style="color:var(--in)"></i>Alertas — Qualif./Validações</div>'+alertsQualifHtml+'</div>';
+    return;
+  }
+
   c.innerHTML=
     '<div class="ph">'+
       '<div class="ph-l"><div class="ph-bar"></div><div>'+
