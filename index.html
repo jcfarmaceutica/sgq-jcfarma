@@ -730,6 +730,7 @@ async function launchApp(){
   const lblIni=navIni?navIni.lbl:'Dashboard';
   if(curV!=='dash'&&navIni&&navIni.sub) openNav[curV]=true;
   buildNav(); setBc(lblIni); render();
+  initHist();
 }
 
 function updateSearchPlaceholder(){
@@ -877,7 +878,53 @@ function setBc(a,b){
   if(b) el.innerHTML=`<span class="bc-i">SGQ</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-i">${a}</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-c">${b}</span>`;
   else el.innerHTML=`<span class="bc-i">SGQ</span><span class="bc-s"><i class="ti ti-chevron-right"></i></span><span class="bc-c">${a}</span>`;
 }
-function navigate(id,parent,label){ curV=id; curParent=parent||null; curLabel=label||null; curPastaId=null; curPastaNome=''; window._docsObsTab=false; window._docsTab='ativos'; window._treinObsTab=false; selectedIds=new Set(); curOpAno=null; curOpMes=null; buildNav(); if(parent&&label) setBc(parent,label); else { const ni=NAV.find(n=>n.id===id); setBc(ni?ni.lbl:label||id); } render(); }
+function navigate(id,parent,label){ curV=id; curParent=parent||null; curLabel=label||null; curPastaId=null; curPastaNome=''; window._docsObsTab=false; window._docsTab='ativos'; window._treinObsTab=false; selectedIds=new Set(); curOpAno=null; curOpMes=null; buildNav(); if(parent&&label) setBc(parent,label); else { const ni=NAV.find(n=>n.id===id); setBc(ni?ni.lbl:label||id); } pushHist(); render(); }
+
+// --- Histórico do navegador (botão voltar não sai da plataforma) ---
+let _histReady=false;
+function pushHist(){
+  if(!_histReady) return;
+  try{ history.pushState({sgq:true, v:curV, parent:curParent, label:curLabel, pastaId:curPastaId, pastaNome:curPastaNome}, '', ''); }catch(e){}
+}
+function initHist(){
+  if(_histReady) return;
+  _histReady=true;
+  // Estado âncora: impede que o primeiro "voltar" saia da plataforma
+  try{ history.replaceState({sgq:true, v:curV, anchor:true}, '', ''); }catch(e){}
+  window.addEventListener('popstate', (ev)=>{
+    const st=ev.state;
+    // Sem app aberto (ainda na tela de login) → deixa o navegador agir normalmente
+    const app=document.getElementById('app');
+    if(!app || app.style.display==='none') return;
+    if(st && st.sgq){
+      if(st.anchor){
+        // Chegou no estado âncora (início). Reempurra para não sair, e volta ao dashboard.
+        if(curV!=='dash'){
+          history.pushState({sgq:true, v:curV, parent:curParent, label:curLabel, pastaId:curPastaId, pastaNome:curPastaNome}, '', '');
+          restoreState({v:'dash'});
+        } else {
+          // Já no dashboard: reancorar (fica na plataforma)
+          history.pushState({sgq:true, v:'dash', anchor:false}, '', '');
+        }
+        return;
+      }
+      restoreState(st);
+    }
+  });
+}
+function restoreState(st){
+  curV=st.v||'dash';
+  curParent=st.parent||null;
+  curLabel=st.label||null;
+  curPastaId=st.pastaId||null;
+  curPastaNome=st.pastaNome||'';
+  window._docsObsTab=false; window._docsTab='ativos'; window._treinObsTab=false;
+  selectedIds=new Set(); curOpAno=null; curOpMes=null;
+  if(curParent&&curLabel){ const pn=NAV.find(n=>n.sub&&n.sub.some(s=>s.id===curV)); if(pn) openNav[pn.id]=true; }
+  buildNav();
+  if(curParent&&curLabel) setBc(curParent,curLabel); else { const ni=NAV.find(n=>n.id===curV); setBc(ni?ni.lbl:curV); }
+  render();
+}
 
 // ============================================================
 // HELPERS
@@ -943,6 +990,7 @@ async function buildNotifs(){
   // 3. Dynamic: POPs review alerts (docs in POPs pasta with data_validade approaching)
   let popsQ = sb.from('documentos')
     .select('id,nome,data_validade,filial,pasta_id,modulo')
+    .eq('modulo','POPs')
     .eq('obsoleto',false)
     .is('excluido_em',null)
     .not('pasta_id','is',null)
@@ -1873,7 +1921,7 @@ async function render(){
 
 async function renderDash(){
   const filQ=(t)=>{ if(filialAtiva==='todas') return t; return t.eq('filial',filialAtiva); };
-  const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
+  const popsRevQ=sb.from('documentos').select('id,nome,data_validade,filial,pasta_id').eq('modulo','POPs').eq('obsoleto',false).not('pasta_id','is',null).not('data_validade','is',null).lte('data_validade',new Date(new Date().setDate(new Date().getDate()+30)).toISOString().split('T')[0]);
   const [{data:docs},{data:trein},{data:aud},{data:popsReview},{data:todasPastas}]=await Promise.all([
     filQ(sb.from('documentos').select('*')).eq('obsoleto',false).is('excluido_em',null).order('criado_em',{ascending:false}),
     filQ(sb.from('treinamentos').select('id,status,data_realizacao,avaliacao_eficacia,resultado_eficacia,filial,obsoleto,nome')).eq('obsoleto',false).is('excluido_em',null),
@@ -3366,7 +3414,7 @@ document.getElementById('cnt').addEventListener('click', e => {
   const upReg=t.closest('[data-upload-reg]');
   if(upReg){ uploadToReg(upReg.dataset['upload-reg']||upReg.getAttribute('data-upload-reg')); return; }
   const pastaCard = t.closest('.pasta-card');
-  if(pastaCard && !t.closest('.pasta-actions')){ curPastaId=pastaCard.dataset.pastaid; curPastaNome=pastaCard.dataset.pastanome; render(); return; }
+  if(pastaCard && !t.closest('.pasta-actions')){ curPastaId=pastaCard.dataset.pastaid; curPastaNome=pastaCard.dataset.pastanome; pushHist(); render(); return; }
   if(t.closest('#btnNPasta')||t.closest('#btnNPasta2')){ const btn=t.closest('#btnNPasta')||t.closest('#btnNPasta2'); document.getElementById('pastaId').value=''; document.getElementById('pastaNome').value=''; document.getElementById('pastaSubmod').value=btn.dataset.submod||SMAP[curV]||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-folder-plus" style="color:var(--l)"></i>Nova Pasta'; const ownerNew=filialAtiva==='todas'?'GO':filialAtiva; document.getElementById('fgPastaShare').innerHTML=buildShareChecklist(ownerNew,[]); openModal('mPasta'); return; }
   const editUsrEl=t.closest('[data-editusr]'); if(editUsrEl){ editUsr(editUsrEl.dataset.editusr); return; }
   const editPasta=t.closest('[data-editpasta]'); if(editPasta){ document.getElementById('pastaId').value=editPasta.dataset.editpasta; document.getElementById('pastaNome').value=editPasta.dataset.pastanome; document.getElementById('pastaSubmod').value=editPasta.dataset.submod||''; document.getElementById('mPastaTit').innerHTML='<i class="ti ti-edit" style="color:var(--l)"></i>Renomear Pasta'; const ownerEdit=editPasta.dataset.filial||'GO'; const checkedEdit=(editPasta.dataset.compartilhadas||'').split(',').filter(Boolean); document.getElementById('fgPastaShare').innerHTML=buildShareChecklist(ownerEdit,checkedEdit); openModal('mPasta'); return; }
@@ -3788,6 +3836,7 @@ async function goToAlerta(docId, pastaId, modulo, submodulo){
     setTimeout(()=>{
       curPastaId = pastaId;
       curPastaNome = pastaNome;
+      pushHist();
       render();
       setTimeout(()=>destacarLinhaDoc(docId), 700);
     }, 300);
